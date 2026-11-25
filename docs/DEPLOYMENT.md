@@ -47,6 +47,6 @@ Back up the Postgres database (predictions, settlements and picks are the irrepl
 
 1. `python -m app.cli bootstrap` loads the committed dataset into SQLite, trains the models and builds the prediction archive.
 2. `python -m app.cli export-static` renders every API response the web app uses into `frontend/public/data` (file names are defined by `static_key`, mirrored by `staticKey` in `frontend/lib/api.ts`).
-3. The frontend is built with `STATIC_EXPORT=1` (Next.js static export) and deployed with `actions/deploy-pages`.
+3. The frontend is built with `STATIC_EXPORT=1` (Next.js static export) and pushed to the `gh-pages` branch.
 
-The first run enables GitHub Pages with "GitHub Actions" as the source. If the repository settings block this, enable it under Settings, Pages, Build and deployment, Source: GitHub Actions.
+GitHub Pages serves the `gh-pages` branch (Settings, Pages, Build and deployment: "Deploy from a branch", `gh-pages`, `/ (root)`).
