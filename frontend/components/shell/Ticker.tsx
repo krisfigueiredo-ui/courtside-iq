@@ -88,8 +88,8 @@ export function Ticker() {
           ))}
         </div>
         <div className="hidden shrink-0 items-center gap-1.5 text-[10px] text-mist-500 lg:flex" title={`Ticker transport: ${transport}`}>
-          <span className={cn("h-1.5 w-1.5 rounded-full", transport === "stream" ? "bg-gain" : "bg-gold")} />
-          {transport === "stream" ? "Live stream" : "Polling"}
+          <span className={cn("h-1.5 w-1.5 rounded-full", transport === "stream" ? "bg-gain" : transport === "snapshot" ? "bg-mist-500" : "bg-gold")} />
+          {transport === "stream" ? "Live stream" : transport === "snapshot" ? "Snapshot" : "Polling"}
         </div>
       </div>
       <div className="flex gap-1 px-3 pb-2 sm:hidden">

@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
-import { API_BASE, api } from "./api";
+import { API_BASE, STATIC, api } from "./api";
 import type { Game } from "./types";
 
 export interface TickerPayload {
@@ -20,7 +20,7 @@ export function useTicker(league?: string) {
   const qs = league ? `?league=${league}` : "";
 
   useEffect(() => {
-    if (typeof window === "undefined" || !("EventSource" in window)) return;
+    if (STATIC || typeof window === "undefined" || !("EventSource" in window)) return;
     const es = new EventSource(`${API_BASE}/api/stream/ticker${qs}`);
     esRef.current = es;
     es.addEventListener("ticker", (e) => {
@@ -36,13 +36,13 @@ export function useTicker(league?: string) {
   const poll = useQuery<TickerPayload>({
     queryKey: ["ticker", league],
     queryFn: () => api(`/api/ticker${qs}`),
-    refetchInterval: sseOk ? false : 20_000,
+    refetchInterval: STATIC || sseOk ? false : 20_000,
   });
-  return { data: sseOk && sse ? sse : poll.data, transport: sseOk ? "stream" : "polling", isLoading: !sse && poll.isLoading };
+  return { data: sseOk && sse ? sse : poll.data, transport: STATIC ? "snapshot" : sseOk ? "stream" : "polling", isLoading: !sse && poll.isLoading };
 }
 
 export function useStatus() {
-  return useQuery<any>({ queryKey: ["status"], queryFn: () => api("/api/status"), refetchInterval: 30_000 });
+  return useQuery<any>({ queryKey: ["status"], queryFn: () => api("/api/status"), refetchInterval: STATIC ? false : 30_000 });
 }
 
 export function useNow(intervalMs = 1000) {

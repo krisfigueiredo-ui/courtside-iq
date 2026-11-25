@@ -1,5 +1,13 @@
 # COURTSIDE IQ
 
+[![CI](https://github.com/krisfigueiredo-ui/courtside-iq/actions/workflows/ci.yml/badge.svg)](https://github.com/krisfigueiredo-ui/courtside-iq/actions/workflows/ci.yml)
+[![Preview](https://github.com/krisfigueiredo-ui/courtside-iq/actions/workflows/pages.yml/badge.svg)](https://krisfigueiredo-ui.github.io/courtside-iq/)
+![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
+![Next.js](https://img.shields.io/badge/Next.js-15-000000?logo=nextdotjs&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-pgvector-4169E1?logo=postgresql&logoColor=white)
+
+**Live preview: https://krisfigueiredo-ui.github.io/courtside-iq/**
+
 Basketball analytics platform for the NBA and NCAA men's basketball. It combines a live scoreboard, league-specific machine-learning projections, Monte Carlo simulation, sportsbook market comparison, player prop distributions, a trends lab, a permanent prediction archive with automated grading, a data import and cleaning pipeline, and an AI research assistant that answers questions from the platform's own records.
 
 ![Command Center](docs/screenshots/command-center.png)
@@ -65,12 +73,14 @@ courtside-iq/
 │   │   ├── ai/              Retrieval (pgvector), read-only tools, Claude tool-use loop
 │   │   ├── api/routes.py    REST API and SSE ticker
 │   │   ├── scheduler.py     Data refresh, forecast archiving, settlement
+│   │   ├── static_export.py Static preview data export
 │   │   └── cli.py           Operations CLI
 │   ├── alembic/             Database migrations
 │   ├── data/demo_snapshot/  Committed dataset (gzipped CSV + manifest)
 │   └── tests/               Backend test suite
 ├── frontend/                Next.js 15, TypeScript, Tailwind, Radix UI, Framer Motion, ECharts, TanStack
 ├── docs/                    Deployment guide, dataset reference, screenshots
+├── .github/workflows/       CI and GitHub Pages preview deployment
 └── docker-compose.yml       PostgreSQL + pgvector, Redis, API, worker, web
 ```
 
@@ -85,9 +95,14 @@ courtside-iq/
 
 ## Getting started
 
+### Live preview
+
+A read-only build of the application is published to GitHub Pages on every push to `main` and once a day: https://krisfigueiredo-ui.github.io/courtside-iq/. It is generated from the committed dataset by `.github/workflows/pages.yml`. Features that write data (picks, imports, retraining) and the AI assistant require the full application.
+
 ### Docker
 
 ```bash
+git clone https://github.com/krisfigueiredo-ui/courtside-iq.git
 cd courtside-iq
 cp .env.example .env
 docker compose up --build
@@ -282,7 +297,12 @@ GitHub Actions runs the backend on SQLite and PostgreSQL, the frontend type chec
 
 ## Deployment
 
-See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). To build the static preview locally:
+
+```bash
+cd backend && python -m app.cli bootstrap && python -m app.cli export-static --out ../frontend/public/data
+cd ../frontend && STATIC_EXPORT=1 NEXT_PUBLIC_STATIC=1 npm run build    # output in frontend/out
+```
 
 ## Limitations
 

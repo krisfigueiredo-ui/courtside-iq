@@ -25,6 +25,7 @@ import { useEffect, useState } from "react";
 
 import { AIPanel } from "@/components/shell/AIPanel";
 import { Ticker } from "@/components/shell/Ticker";
+import { REPO_URL, STATIC } from "@/lib/api";
 import { cn } from "@/lib/format";
 import { useNow, useStatus } from "@/lib/hooks";
 
@@ -141,10 +142,20 @@ function TopBar({ onMenu, onAI }: { onMenu: () => void; onAI: () => void }) {
         </div>
       </div>
       <div className="flex items-center gap-3">
-        {data?.demo && (
-          <span className="hidden rounded-md border border-flare/30 bg-flare/10 px-2 py-1 text-[10.5px] font-semibold text-flare md:inline">
-            DEMO MODE · synthetic data, no live provider connected
-          </span>
+        {STATIC ? (
+          <a
+            href={REPO_URL}
+            className="hidden rounded-md border border-flare/30 bg-flare/10 px-2 py-1 text-[10.5px] font-semibold text-flare hover:bg-flare/20 md:inline"
+            title="Read-only preview built from the repository's demo dataset. Run the application for live updates, the AI assistant, imports and picks."
+          >
+            STATIC PREVIEW · demo data as of {data?.server_time ? new Date(data.server_time).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" }) : "…"} · view source
+          </a>
+        ) : (
+          data?.demo && (
+            <span className="hidden rounded-md border border-flare/30 bg-flare/10 px-2 py-1 text-[10.5px] font-semibold text-flare md:inline">
+              DEMO MODE · synthetic data, no live provider connected
+            </span>
+          )
         )}
         <span className="hidden items-center gap-1.5 font-mono text-[11px] text-mist-400 sm:flex">
           <Gauge className="h-3.5 w-3.5" />

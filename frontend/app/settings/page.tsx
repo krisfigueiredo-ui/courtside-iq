@@ -5,7 +5,7 @@ import { CheckCircle2, CircleSlash, KeyRound, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Badge, Button, ErrorState, KV, PageHeader, Panel, PanelHeader, Segmented, Skeleton } from "@/components/ui/primitives";
-import { api, useApi } from "@/lib/api";
+import { STATIC, STATIC_MESSAGE, api, useApi } from "@/lib/api";
 import { ago, cn } from "@/lib/format";
 
 const PROVIDERS: Record<string, { env: string; label: string; docs: string; covers: string }> = {
@@ -94,7 +94,7 @@ export default function SettingsPage() {
               ))}
               <div className="mt-3 flex gap-2">
                 <input value={token} onChange={(e) => setToken(e.target.value)} placeholder="Admin token (if set)" className="w-full rounded-md border border-line bg-ink-900 px-2 py-1 text-xs text-mist" type="password" />
-                <Button size="sm" onClick={() => refresh.mutate()} disabled={refresh.isPending}>
+                <Button size="sm" onClick={() => refresh.mutate()} disabled={STATIC || refresh.isPending} title={STATIC ? STATIC_MESSAGE : undefined}>
                   <RefreshCw className={cn("h-3.5 w-3.5", refresh.isPending && "animate-spin")} /> Refresh now
                 </Button>
               </div>
@@ -177,7 +177,7 @@ function AssetRegistry({ token }: { token: string }) {
           <label className="col-span-2 flex items-center gap-2 text-xs text-mist-400">
             <input type="checkbox" checked={f.verified} onChange={(e) => setF({ ...f, verified: e.target.checked })} /> I have verified this asset depicts the correct team/player and that we hold usage rights
           </label>
-          <Button type="submit" variant="primary" className="col-span-2" size="sm" disabled={add.isPending}>
+          <Button type="submit" variant="primary" className="col-span-2" size="sm" disabled={STATIC || add.isPending} title={STATIC ? STATIC_MESSAGE : undefined}>
             Register asset
           </Button>
           {add.error && <div className="col-span-2"><ErrorState error={add.error} /></div>}

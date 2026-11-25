@@ -9,7 +9,7 @@ import { C, EChart, baseAxis, tooltip } from "@/components/charts/EChart";
 import { TeamCrest } from "@/components/identity/identity";
 import { DataTable } from "@/components/ui/DataTable";
 import { Badge, Button, Empty, PageHeader, Panel, PanelHeader, ResultBadge, Segmented, Skeleton, Stat, Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/primitives";
-import { api, exportUrl, useApi } from "@/lib/api";
+import { STATIC, STATIC_MESSAGE, api, exportUrl, useApi } from "@/lib/api";
 import { american, cn, dateShort, MARKET_LABEL, num, pct, signed, spreadLine } from "@/lib/format";
 import type { Game, PerfBlock, PredictionRow } from "@/lib/types";
 
@@ -264,7 +264,11 @@ function BreakdownTable({ rows, loading }: { rows: any[]; loading: boolean }) {
 function Archive({ lq }: { lq: string }) {
   const [market, setMarket] = useState("");
   const [result, setResult] = useState("");
-  const q = useApi<PredictionRow[]>(`/api/predictions?limit=1500${lq ? `&${lq}` : ""}${market ? `&market=${market}` : ""}${result ? `&result=${result}` : ""}`);
+  const q = useApi<PredictionRow[]>(`/api/predictions?limit=1500${lq ? `&${lq}` : ""}`);
+  const rows = useMemo(
+    () => (q.data ?? []).filter((r) => (!market || r.market.startsWith(market)) && (!result || r.result === result)),
+    [q.data, market, result],
+  );
   const col = createColumnHelper<PredictionRow>();
   const columns = useMemo(
     () => [
@@ -325,7 +329,7 @@ function Archive({ lq }: { lq: string }) {
           </div>
         }
       />
-      {q.isLoading ? <Skeleton className="m-4 h-96" /> : <DataTable data={q.data ?? []} columns={columns as any} pageSize={20} searchable dense />}
+      {q.isLoading ? <Skeleton className="m-4 h-96" /> : <DataTable data={rows} columns={columns as any} pageSize={20} searchable dense />}
     </Panel>
   );
 }
@@ -441,7 +445,7 @@ function Journal() {
             <textarea className={input} rows={2} value={f.confidence_notes} onChange={(e) => setF({ ...f, confidence_notes: e.target.value })} />
           </label>
           {err && <div className="col-span-2 text-xs text-loss">{err}</div>}
-          <Button type="submit" variant="primary" className="col-span-2" disabled={create.isPending}>
+          <Button type="submit" variant="primary" className="col-span-2" disabled={STATIC || create.isPending} title={STATIC ? STATIC_MESSAGE : undefined}>
             Save pick
           </Button>
           <p className="col-span-2 text-[10.5px] text-mist-500">Linked picks settle automatically when the game goes final. Unlinked picks can be graded manually.</p>

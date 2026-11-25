@@ -6,7 +6,7 @@ import { useRef, useState } from "react";
 
 import { C, EChart } from "@/components/charts/EChart";
 import { Badge, Button, Empty, ErrorState, KV, PageHeader, Panel, PanelHeader, Segmented, Skeleton, Stat } from "@/components/ui/primitives";
-import { api, exportUrl, useApi } from "@/lib/api";
+import { STATIC, STATIC_MESSAGE, api, exportUrl, useApi } from "@/lib/api";
 import { cn, dateTime, pct } from "@/lib/format";
 
 const DATASETS: { key: string; label: string; desc: string }[] = [
@@ -114,7 +114,7 @@ export default function DataCenter() {
                 ))}
               </select>
             </div>
-            <Button variant="primary" className="w-full" disabled={!file || upload.isPending} onClick={() => upload.mutate()}>
+            <Button variant="primary" className="w-full" disabled={STATIC || !file || upload.isPending} onClick={() => upload.mutate()} title={STATIC ? STATIC_MESSAGE : undefined}>
               {upload.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />} Validate & preview
             </Button>
             {upload.error && <ErrorState error={upload.error} />}

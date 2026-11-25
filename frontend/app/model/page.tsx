@@ -7,7 +7,7 @@ import { useMemo, useState } from "react";
 import { C, EChart, SERIES, baseAxis, tooltip } from "@/components/charts/EChart";
 import { DistributionChart } from "@/components/game/game";
 import { Badge, Button, Empty, KV, PageHeader, Panel, PanelHeader, Segmented, Skeleton, Stat } from "@/components/ui/primitives";
-import { api, useApi } from "@/lib/api";
+import { STATIC, STATIC_MESSAGE, api, useApi } from "@/lib/api";
 import { cn, dateTime, featureLabel, num, pct, signed } from "@/lib/format";
 import type { BoardRow } from "@/lib/types";
 
@@ -31,10 +31,10 @@ export default function ModelIntelligence() {
         right={
           <>
             <Segmented value={league} onChange={(v) => { setLeague(v); setSel(null); }} options={[{ value: "NBA", label: "NBA" }, { value: "CBB", label: "CBB" }]} />
-            <Button size="sm" onClick={() => train.mutate()} disabled={train.isPending}>
+            <Button size="sm" onClick={() => train.mutate()} disabled={STATIC || train.isPending} title={STATIC ? STATIC_MESSAGE : undefined}>
               {train.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />} Retrain
             </Button>
-            <Button size="sm" onClick={() => tune.mutate(15)} disabled={tune.isPending}>
+            <Button size="sm" onClick={() => tune.mutate(15)} disabled={STATIC || tune.isPending} title={STATIC ? STATIC_MESSAGE : undefined}>
               {tune.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <SlidersHorizontal className="h-3.5 w-3.5" />} Optuna (15 trials)
             </Button>
           </>
@@ -476,7 +476,7 @@ function SimulationExplorer({ league }: { league: string }) {
                 </option>
               ))}
             </select>
-            <Segmented size="sm" value={n} onChange={setN} options={[{ value: "10000", label: "10k" }, { value: "50000", label: "50k" }, { value: "100000", label: "100k" }]} />
+            <Segmented size="sm" value={n} onChange={setN} options={STATIC ? [{ value: "10000", label: "10k" }] : [{ value: "10000", label: "10k" }, { value: "50000", label: "50k" }, { value: "100000", label: "100k" }]} />
           </div>
         }
       />

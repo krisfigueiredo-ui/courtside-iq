@@ -6,7 +6,7 @@ import { ArrowUp, Bot, Database, KeyRound, Loader2, Wrench } from "lucide-react"
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
-import { api, useApi } from "@/lib/api";
+import { STATIC, api, useApi } from "@/lib/api";
 import { cn } from "@/lib/format";
 
 interface Msg {
@@ -94,14 +94,14 @@ export function AIChat({ compact, context }: { compact?: boolean; context?: Reco
     setQ("");
     ask.mutate(text);
   };
-  const disabled = status.data && !status.data.enabled;
+  const disabled = STATIC || (status.data && !status.data.enabled);
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className={cn("flex-1 space-y-4 overflow-y-auto px-4 py-4", !compact && "min-h-[420px]")}>
         {disabled && (
           <div className="rounded-xl border border-gold/30 bg-gold/5 p-3 text-xs text-gold">
             <div className="flex items-center gap-2 font-semibold">
-              <KeyRound className="h-3.5 w-3.5" /> Claude API key not configured
+              <KeyRound className="h-3.5 w-3.5" /> {STATIC ? "Not available in the static preview" : "Claude API key not configured"}
             </div>
             <p className="mt-1 text-gold/80">
               Set <code className="font-mono">ANTHROPIC_API_KEY</code> on the backend to enable COURTSIDE AI. All other analytics work without it.{" "}

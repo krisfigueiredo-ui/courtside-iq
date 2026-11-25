@@ -40,3 +40,13 @@ In demo mode an empty database is populated from `backend/data/demo_snapshot` on
 ## Backups
 
 Back up the Postgres database (predictions, settlements and picks are the irreplaceable records) and the `artifacts/` volume. Raw import files in `data/raw/` are content-addressed by SHA-256.
+
+## Static preview (GitHub Pages)
+
+`.github/workflows/pages.yml` publishes a read-only build on every push to `main` and daily:
+
+1. `python -m app.cli bootstrap` loads the committed dataset into SQLite, trains the models and builds the prediction archive.
+2. `python -m app.cli export-static` renders every API response the web app uses into `frontend/public/data` (file names are defined by `static_key`, mirrored by `staticKey` in `frontend/lib/api.ts`).
+3. The frontend is built with `STATIC_EXPORT=1` (Next.js static export) and deployed with `actions/deploy-pages`.
+
+The first run enables GitHub Pages with "GitHub Actions" as the source. If the repository settings block this, enable it under Settings, Pages, Build and deployment, Source: GitHub Actions.
