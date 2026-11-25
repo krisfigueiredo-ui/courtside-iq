@@ -20,7 +20,7 @@ describe("DataTable", () => {
     fireEvent.click(screen.getByText("Net"));
     rows = screen.getAllByRole("row").slice(1);
     expect(within(rows[0]).getByText("C")).toBeInTheDocument();
-    fireEvent.change(screen.getByPlaceholderText("Filter…"), { target: { value: "A" } });
+    fireEvent.change(screen.getByPlaceholderText("Search rows"), { target: { value: "A" } });
     expect(screen.getAllByRole("row")).toHaveLength(2);
   });
 });
@@ -28,7 +28,7 @@ describe("DataTable", () => {
 describe("primitives", () => {
   it("ProbBar sizes segments by probability including pushes", () => {
     const { container } = render(<ProbBar left={0.55} right={0.4} push={0.05} />);
-    const segs = container.querySelectorAll(".flex.h-1\\.5 > div");
+    const segs = container.querySelectorAll(".flex.h-1 > div");
     expect((segs[0] as HTMLElement).style.width).toBe("55.00000000000001%");
     expect(segs).toHaveLength(3);
   });

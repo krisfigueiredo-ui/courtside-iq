@@ -19,3 +19,6 @@ frontend/next-env.d.ts
 .env.local
 frontend/public/data/
 backend/data/espn_cache/
+frontend/test-results/
+frontend/playwright-report/
+frontend/storybook-static/

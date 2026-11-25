@@ -1,370 +1,258 @@
 "use client";
 
-import { ArrowUpRight, Flame, Radio, Target, TrendingUp } from "lucide-react";
+import { createColumnHelper } from "@tanstack/react-table";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useMemo } from "react";
 
 import { C, EChart, baseAxis, tooltip } from "@/components/charts/EChart";
-import { MatchupCard, PropCard, StatusPill } from "@/components/game/game";
-import { pairColors, TeamCrest } from "@/components/identity/identity";
-import { Badge, Empty, PageHeader, Panel, PanelHeader, ResultBadge, Segmented, Skeleton, SourceStamp, Stat } from "@/components/ui/primitives";
+import { PlayerPortrait, TeamCrest } from "@/components/identity/identity";
+import { DataTable } from "@/components/ui/DataTable";
+import { Empty, LiveDot, Panel, PanelHeader, ResultBadge, Skeleton, SourceStamp, Stat, StatStrip } from "@/components/ui/primitives";
 import { useApi } from "@/lib/api";
-import { cn, MARKET_LABEL, num, pct, signed, spreadLine } from "@/lib/format";
+import { MARKET_LABEL, cn, num, pct, periodLabel, signed, spreadLine, timeShort } from "@/lib/format";
 import { useTicker } from "@/lib/hooks";
-import type { BoardRow, PerfBlock, PredictionRow, PropProjection } from "@/lib/types";
+import { usePrefs } from "@/lib/store";
+import type { BoardRow, PredictionRow, PropProjection } from "@/lib/types";
 
-export default function CommandCenter() {
-  const [league, setLeague] = useState<"ALL" | "NBA" | "CBB">("ALL");
-  const q = league === "ALL" ? "" : `?league=${league}`;
-  const board = useApi<{ generated_at: string; demo: boolean; games: BoardRow[] }>(`/api/board${q}`, { refetchInterval: 60_000 });
-  const perf = useApi<any>(`/api/performance/summary${q}`);
-  const recent = useApi<PredictionRow[]>(`/api/predictions?limit=60&settled=true&games_only=true${league === "ALL" ? "" : `&league=${league}`}`);
-  const props = useApi<{ props: PropProjection[] }>("/api/props?league=NBA");
-  const { data: ticker } = useTicker(league === "ALL" ? undefined : league);
+interface SlateRow {
+  r: BoardRow;
+  t: number;
+  matchup: string;
+  league: string;
+  winHome: number;
+  modelSpread: number;
+  closeSpread: number | null;
+  dSpread: number | null;
+  modelTotal: number;
+  closeTotal: number | null;
+  dTotal: number | null;
+}
+const col = createColumnHelper<SlateRow>();
+const delta = (v: number | null, big: number) =>
+  v == null ? <span className="text-subtle">–</span> : <span className={cn(Math.abs(v) >= big ? "text-accent" : "text-fg-2")}>{signed(v, 1)}</span>;
 
-  const games = board.data?.games ?? [];
-  const featured = useMemo(
-    () =>
-      [...games]
-        .filter((r) => r.game.status === "scheduled")
-        .sort((a, b) => Math.abs(b.vs_market.spread?.line_diff ?? 0) + Math.abs(b.vs_market.total?.line_diff ?? 0) / 2 - (Math.abs(a.vs_market.spread?.line_diff ?? 0) + Math.abs(a.vs_market.total?.line_diff ?? 0) / 2))
-        .slice(0, 6),
-    [games],
-  );
-  const live = (ticker?.games ?? []).filter((g) => g.status === "live");
-  const total: PerfBlock | undefined = perf.data?.total;
-  const topEdge = featured[0];
-
-  return (
-    <div className="space-y-6">
-      <PageHeader
-        index="01"
-        title="Command Center"
-        subtitle="Today's slate, model outlook versus the market, player-prop signals and the model's track record, all in one place."
-        right={
-          <>
-            <Segmented
-              value={league}
-              onChange={setLeague}
-              options={[
-                { value: "ALL", label: "All leagues" },
-                { value: "NBA", label: "NBA" },
-                { value: "CBB", label: "College" },
-              ]}
-            />
-          </>
-        }
-      />
-
-      {/* KPI strip */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <Panel className="p-4">
-          <Stat label="On the board" value={games.length || "—"} sub={`${games.filter((g) => g.game.league === "NBA").length} NBA · ${games.filter((g) => g.game.league === "CBB").length} CBB`} />
-        </Panel>
-        <Panel className="p-4">
-          <Stat label={<span className="flex items-center gap-1"><Radio className="h-3 w-3 text-loss" /> Live now</span>} value={live.length} sub={live[0] ? `${live[0].away.abbr} ${live[0].away_score}–${live[0].home_score} ${live[0].home.abbr}` : "no live games"} tone={live.length ? "loss" : undefined} />
-        </Panel>
-        <Panel className="p-4">
-          <Stat label="Settled forecasts" value={total ? total.decided.toLocaleString() : "—"} sub={`${perf.data?.pending ?? 0} pending`} />
-        </Panel>
-        <Panel className="p-4">
-          <Stat
-            label="Hit rate"
-            value={pct(total?.win_pct)}
-            sub={total ? `95% CI ${pct(total.win_pct_ci[0], 0)}–${pct(total.win_pct_ci[1], 0)}` : ""}
-            tone="volt"
-            hint="Share of decided pre-game forecasts (all markets) where the model's side won. Pushes excluded."
-          />
-        </Panel>
-        <Panel className="p-4">
-          <Stat label="Brier score" value={num(total?.brier, 3)} sub={`ECE ${num(total?.ece, 3)} · lower is better`} hint="Mean squared error of predicted probabilities; 0.25 = coin flip." />
-        </Panel>
-        <Panel className="p-4">
-          <Stat
-            label="Largest disagreement"
-            value={topEdge ? signed(topEdge.vs_market.spread?.line_diff, 1) : "—"}
-            sub={topEdge ? `${topEdge.game.away.abbr} @ ${topEdge.game.home.abbr} spread` : "—"}
-            tone="flare"
-          />
-        </Panel>
-      </div>
-
-      <div className="grid gap-6 xl:grid-cols-[1fr_380px]">
-        <div className="space-y-6">
-          <Panel>
-            <PanelHeader
-              eyebrow="Featured matchups"
-              title="Biggest model vs market disagreements"
-              icon={<Flame className="h-4 w-4 text-flare" />}
-              right={<SourceStamp at={board.data?.generated_at} demo={board.data?.demo} />}
-            />
-            <div className="grid gap-4 p-4 md:grid-cols-2 2xl:grid-cols-3">
-              {board.isLoading && Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-[230px]" />)}
-              {featured.map((r, i) => (
-                <MatchupCard key={r.game.id} row={r} index={i} />
-              ))}
-              {!board.isLoading && featured.length === 0 && <Empty title="No upcoming games in the next 36 hours" />}
-            </div>
-          </Panel>
-
-          <div className="grid gap-6 lg:grid-cols-2">
-            <Panel>
-              <PanelHeader eyebrow="Model outlook" title="Model win probability vs no-vig market" icon={<Target className="h-4 w-4 text-volt" />} />
-              <div className="p-2">
-                <OutlookScatter rows={games} />
-              </div>
-              <p className="px-4 pb-3 text-[11px] text-mist-500">Points above the diagonal: the model rates the home team higher than the market does. Hover for the matchup.</p>
-            </Panel>
-            <Comparison rows={games} />
-          </div>
-
-          <Panel>
-            <PanelHeader eyebrow="Market intelligence" title="Lines, model projections and edges" right={<Link href="/spreads" className="flex items-center gap-1 text-xs text-volt-300 hover:underline">Spreads & odds <ArrowUpRight className="h-3 w-3" /></Link>} />
-            <MarketTable rows={games.slice(0, 14)} />
-          </Panel>
-        </div>
-
-        <div className="space-y-6">
-          <Panel>
-            <PanelHeader eyebrow="Track record" title="Rolling accuracy" icon={<TrendingUp className="h-4 w-4 text-cyan" />} right={<Link href="/picks" className="text-xs text-volt-300 hover:underline">Tracker</Link>} />
-            <div className="p-2">
-              {perf.data?.rolling?.length ? (
-                <EChart
-                  height={170}
-                  option={{
-                    grid: { left: 36, right: 10, top: 12, bottom: 22 },
-                    tooltip: { ...tooltip, valueFormatter: (v: any) => `${(v * 100).toFixed(1)}%` },
-                    xAxis: { type: "category", data: perf.data.rolling.map((r: any) => r.t.slice(5, 10)), ...baseAxis },
-                    yAxis: { type: "value", min: 0.3, max: 0.8, ...baseAxis, axisLabel: { ...baseAxis.axisLabel, formatter: (v: number) => `${Math.round(v * 100)}%` } },
-                    series: [
-                      {
-                        type: "line",
-                        smooth: true,
-                        showSymbol: false,
-                        data: perf.data.rolling.map((r: any) => r.rate),
-                        lineStyle: { color: C.cyan, width: 2 },
-                        areaStyle: { color: { type: "linear", x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: "rgba(34,211,238,0.25)" }, { offset: 1, color: "rgba(34,211,238,0)" }] } },
-                        markLine: { symbol: "none", data: [{ yAxis: 0.5 }], lineStyle: { color: C.mist5, type: "dashed" }, label: { show: false } },
-                      },
-                    ],
-                  }}
-                />
-              ) : (
-                <Skeleton className="m-2 h-[150px]" />
-              )}
-            </div>
-            <div className="grid grid-cols-2 gap-px border-t border-line/60 bg-line/40">
-              {Object.entries<PerfBlock>(perf.data?.by_market ?? {})
-                .slice(0, 6)
-                .map(([k, v]) => (
-                  <div key={k} className="bg-ink-850 px-4 py-2.5">
-                    <div className="label">{MARKET_LABEL[k] ?? k}</div>
-                    <div className="mt-0.5 flex items-baseline gap-2">
-                      <span className="font-mono text-sm font-semibold text-mist">{pct(v.win_pct)}</span>
-                      <span className="text-[10.5px] text-mist-500">n={v.decided}</span>
-                    </div>
-                  </div>
-                ))}
-            </div>
-          </Panel>
-
-          <Panel>
-            <PanelHeader eyebrow="Recent predictions" title="Outcomes" right={<Link href="/picks" className="text-xs text-volt-300 hover:underline">All</Link>} />
-            <ul className="divide-y divide-line/50">
-              {(recent.data ?? [])
-                .slice(0, 9)
-                .map((p) => (
-                  <li key={p.id}>
-                    <Link href={`/games/${p.game_id}`} className="flex items-center gap-3 px-4 py-2.5 hover:bg-volt/[0.04]">
-                      <div className="flex -space-x-1.5">
-                        <TeamCrest team={p.away} size={20} />
-                        <TeamCrest team={p.home} size={20} />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-xs font-medium text-mist">
-                          {p.away.abbr} @ {p.home.abbr} · {MARKET_LABEL[p.market] ?? p.market}
-                        </div>
-                        <div className="truncate text-[11px] text-mist-500">
-                          {p.selection} {p.line != null ? (p.market === "spread" ? spreadLine(p.line) : p.line) : ""} · {pct(p.predicted_prob, 0)} · actual {num(p.actual, 0)}
-                        </div>
-                      </div>
-                      <ResultBadge result={p.result} />
-                    </Link>
-                  </li>
-                ))}
-              {recent.isLoading && <Skeleton className="m-4 h-40" />}
-            </ul>
-          </Panel>
-
-          <Panel>
-            <PanelHeader eyebrow="Player props" title={(props.data?.props ?? []).some((p) => p.markets.pts?.line != null) ? "Largest projection vs line gaps" : "Top projected scorers"} right={<Link href="/props" className="text-xs text-volt-300 hover:underline">Props lab</Link>} />
-            <div className="space-y-3 p-3">
-              {(props.data?.props ?? [])
-                .filter((p) => !p.injury_out)
-                .sort((a, b) =>
-                  a.markets.pts?.line != null || b.markets.pts?.line != null
-                    ? Math.abs(b.markets.pts.mean - (b.markets.pts.line ?? b.markets.pts.mean)) - Math.abs(a.markets.pts.mean - (a.markets.pts.line ?? a.markets.pts.mean))
-                    : b.markets.pts.mean - a.markets.pts.mean,
-                )
-                .slice(0, 3)
-                .map((p) => (
-                  <Link key={`${p.player_id}-${p.game?.id}`} href={`/players/${p.player_id}`} className="block">
-                    <PropCard p={p} stat="pts" />
-                  </Link>
-                ))}
-              {props.isLoading && <Skeleton className="h-40" />}
-              {!props.isLoading && !(props.data?.props ?? []).length && <Empty title="No upcoming player projections">Projections appear for games inside the next 30 hours.</Empty>}
-            </div>
-          </Panel>
-        </div>
-      </div>
-    </div>
-  );
+function Slate({ rows }: { rows: SlateRow[] }) {
+  const router = useRouter();
+  const cols = [
+    col.accessor("t", {
+      header: "Tip",
+      cell: ({ row }) =>
+        row.original.r.game.status === "live" ? (
+          <span className="num inline-flex items-center gap-1 text-live">
+            <LiveDot />
+            {periodLabel(row.original.r.game.league, row.original.r.game.period, row.original.r.game.clock, "live")}
+          </span>
+        ) : (
+          <span className="num text-fg-2">{timeShort(row.original.r.game.start_time)}</span>
+        ),
+    }),
+    col.accessor("matchup", {
+      header: "Matchup",
+      meta: { pin: true },
+      cell: ({ row }) => {
+        const g = row.original.r.game;
+        return (
+          <span className="flex items-center gap-1.5">
+            <TeamCrest team={g.away} size={16} />
+            <span className="text-fg">{g.away.abbr}</span>
+            <span className="text-subtle">@</span>
+            <TeamCrest team={g.home} size={16} />
+            <span className="text-fg">{g.home.abbr}</span>
+            {g.neutral && <span className="text-2xs text-subtle">N</span>}
+          </span>
+        );
+      },
+    }),
+    col.accessor("league", { header: "Lg", meta: { filter: "select", label: "leagues" } }),
+    col.accessor("winHome", { header: "Home win", meta: { align: "right" }, cell: ({ getValue }) => pct(getValue(), 0) }),
+    col.accessor("modelSpread", { header: "Model sprd", meta: { align: "right" }, cell: ({ getValue }) => spreadLine(getValue()) }),
+    col.accessor("closeSpread", { header: "Market", meta: { align: "right" }, cell: ({ getValue }) => (getValue() == null ? <span className="text-subtle">–</span> : spreadLine(getValue())) }),
+    col.accessor("dSpread", { header: "Δ sprd", meta: { align: "right" }, sortingFn: (a, b) => Math.abs(a.original.dSpread ?? 0) - Math.abs(b.original.dSpread ?? 0), cell: ({ getValue }) => delta(getValue(), 3) }),
+    col.accessor("modelTotal", { header: "Model tot", meta: { align: "right" }, cell: ({ getValue }) => num(getValue(), 1) }),
+    col.accessor("closeTotal", { header: "Market", meta: { align: "right" }, cell: ({ getValue }) => (getValue() == null ? <span className="text-subtle">–</span> : num(getValue(), 1)) }),
+    col.accessor("dTotal", { header: "Δ tot", meta: { align: "right" }, sortingFn: (a, b) => Math.abs(a.original.dTotal ?? 0) - Math.abs(b.original.dTotal ?? 0), cell: ({ getValue }) => delta(getValue(), 5) }),
+  ];
+  return <DataTable data={rows} columns={cols as any} virtual height={430} searchable onRowClick={(r) => router.push(`/games/${r.r.game.id}`)} minWidth={760} />;
 }
 
-function OutlookScatter({ rows }: { rows: BoardRow[] }) {
-  const pts = rows.filter((r) => r.vs_market.moneyline).map((r) => ({ value: [r.vs_market.moneyline!.no_vig_home, r.simulation.win_prob_home], name: `${r.game.away.abbr} @ ${r.game.home.abbr}`, league: r.game.league }));
+function Track({ perf }: { perf: any }) {
+  if (!perf?.rolling?.length) return <Empty title="No graded forecasts yet" />;
   return (
     <EChart
-      height={260}
+      height={150}
       option={{
-        grid: { left: 44, right: 16, top: 16, bottom: 36 },
-        tooltip: { trigger: "item", backgroundColor: "rgba(10,18,34,0.96)", borderColor: C.line, textStyle: { color: C.mist, fontSize: 12 }, formatter: (p: any) => `${p.data.name}<br/>Market ${(p.value[0] * 100).toFixed(1)}% · Model ${(p.value[1] * 100).toFixed(1)}%` },
-        xAxis: { type: "value", min: 0, max: 1, name: "Market (no-vig) home win %", nameLocation: "middle", nameGap: 24, ...baseAxis, axisLabel: { ...baseAxis.axisLabel, formatter: (v: number) => `${v * 100}` } },
-        yAxis: { type: "value", min: 0, max: 1, name: "Model", ...baseAxis, axisLabel: { ...baseAxis.axisLabel, formatter: (v: number) => `${v * 100}` } },
+        grid: { left: 34, right: 8, top: 10, bottom: 20 },
+        tooltip: { ...tooltip, valueFormatter: (v: any) => `${(Number(v) * 100).toFixed(1)}%` },
+        xAxis: { ...baseAxis, type: "category", data: perf.rolling.map((r: any) => r.t.slice(5, 10)), axisLabel: { ...baseAxis.axisLabel, interval: "auto" } },
+        yAxis: { ...baseAxis, type: "value", min: 0.3, max: 0.8, axisLabel: { ...baseAxis.axisLabel, formatter: (v: number) => `${Math.round(v * 100)}` } },
         series: [
-          { type: "line", data: [[0, 0], [1, 1]], showSymbol: false, lineStyle: { color: C.mist5, type: "dashed", width: 1 }, silent: true },
-          { type: "scatter", symbolSize: 11, data: pts.filter((p) => p.league === "NBA"), itemStyle: { color: C.volt, borderColor: "#fff", borderWidth: 0.5 }, name: "NBA" },
-          { type: "scatter", symbolSize: 9, data: pts.filter((p) => p.league === "CBB"), itemStyle: { color: C.cyan, opacity: 0.85 }, name: "CBB" },
+          {
+            type: "line",
+            name: `Hit rate (rolling ${perf.rolling_window})`,
+            showSymbol: false,
+            data: perf.rolling.map((r: any) => r.rate),
+            lineStyle: { color: C.accent, width: 1.5 },
+            markLine: { silent: true, symbol: "none", data: [{ yAxis: 0.5 }], lineStyle: { color: C.edge }, label: { show: false } },
+          },
         ],
       }}
     />
   );
 }
 
-function Comparison({ rows }: { rows: BoardRow[] }) {
-  const options = rows.filter((r) => r.game.status !== "final").slice(0, 30);
-  const [sel, setSel] = useState<number | null>(null);
-  const id = sel ?? options[0]?.game.id ?? null;
-  const detail = useApi<any>(id ? `/api/games/${id}?n_sims=2000` : null);
-  const f = detail.data?.projection?.features;
-  const g = detail.data?.game;
-  const axes = [
-    { k: "adj_ortg", name: "Adj. offense", inv: false },
-    { k: "adj_drtg", name: "Adj. defense", inv: true },
-    { k: "pace", name: "Pace", inv: false },
-    { k: "efg", name: "eFG%", inv: false },
-    { k: "tov", name: "Ball security", inv: true },
-    { k: "orb", name: "Off. rebounding", inv: false },
-    { k: "ftr", name: "FT rate", inv: false },
-  ];
-  const norm = (k: string, v: number, inv: boolean) => {
-    const ranges: Record<string, [number, number]> = { adj_ortg: [95, 125], adj_drtg: [95, 125], pace: [62, 106], efg: [0.44, 0.6], tov: [0.1, 0.22], orb: [0.18, 0.36], ftr: [0.18, 0.4] };
-    const [lo, hi] = ranges[k];
-    const x = Math.max(0, Math.min(1, (v - lo) / (hi - lo)));
-    return Math.round((inv ? 1 - x : x) * 100);
-  };
+function CommandCenter() {
+  const league = usePrefs((st) => st.league);
+  const q = league === "ALL" ? "" : `?league=${league}`;
+  const board = useApi<{ generated_at: string; demo: boolean; games: BoardRow[] }>(`/api/board${q}`, { refetchInterval: 60_000 });
+  const perf = useApi<any>(`/api/performance/summary${q}`);
+  const recent = useApi<PredictionRow[]>(`/api/predictions?limit=60&settled=true&games_only=true${league === "ALL" ? "" : `&league=${league}`}`);
+  const props = useApi<{ props: PropProjection[] }>(league === "CBB" ? null : "/api/props?league=NBA");
+  const { data: ticker } = useTicker(league === "ALL" ? undefined : league);
+  const setAi = usePrefs((s) => s.setAiOpen);
+  useEffect(() => {
+    if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("ai") === "1") setAi(true);
+  }, [setAi]);
+
+  const rows = useMemo<SlateRow[]>(
+    () =>
+      (board.data?.games ?? []).map((r) => {
+        const close = r.market?.spread_home ?? null;
+        const tot = r.market?.total ?? null;
+        return {
+          r,
+          t: Date.parse(r.game.start_time),
+          matchup: `${r.game.away.name} ${r.game.home.name} ${r.game.away.abbr} ${r.game.home.abbr}`,
+          league: r.game.league === "CBB" ? "NCAA" : "NBA",
+          winHome: r.simulation.win_prob_home,
+          modelSpread: r.projected.spread_home,
+          closeSpread: close,
+          dSpread: close == null ? null : r.projected.spread_home - close,
+          modelTotal: r.projected.total,
+          closeTotal: tot,
+          dTotal: tot == null ? null : r.projected.total - tot,
+        };
+      }),
+    [board.data],
+  );
+  const disagreements = [...rows].filter((x) => x.dSpread != null || x.dTotal != null).sort((a, b) => Math.max(Math.abs(b.dSpread ?? 0), Math.abs(b.dTotal ?? 0) / 2) - Math.max(Math.abs(a.dSpread ?? 0), Math.abs(a.dTotal ?? 0) / 2)).slice(0, 8);
+  const live = (ticker?.games ?? []).filter((g) => g.status === "live");
+  const total = perf.data?.total;
+  const bm = perf.data?.by_market ?? {};
+  const nba = rows.filter((r) => r.r.game.league === "NBA").length;
+  const cbb = rows.length - nba;
+
   return (
-    <Panel>
-      <PanelHeader
-        eyebrow="Game comparison"
-        title="Team profile radar"
-        right={
-          <select value={id ?? ""} onChange={(e) => setSel(Number(e.target.value))} className="max-w-[180px] rounded-md border border-line bg-ink-900 px-2 py-1 text-xs text-mist-300 focus:outline-none">
-            {options.map((r) => (
-              <option key={r.game.id} value={r.game.id}>
-                {r.game.away.abbr} @ {r.game.home.abbr} ({r.game.league})
-              </option>
-            ))}
-          </select>
-        }
-      />
-      <div className="p-2">
-        {f && g ? (
-          <EChart
-            height={260}
-            option={{
-              legend: { bottom: 0, textStyle: { color: C.mist4, fontSize: 11 } },
-              tooltip: { trigger: "item", backgroundColor: "rgba(10,18,34,0.96)", borderColor: C.line, textStyle: { color: C.mist, fontSize: 12 } },
-              radar: {
-                indicator: axes.map((a) => ({ name: a.name, max: 100 })),
-                radius: "62%",
-                axisName: { color: C.mist4, fontSize: 10.5 },
-                splitLine: { lineStyle: { color: C.line } },
-                splitArea: { areaStyle: { color: ["rgba(13,23,43,0.4)", "rgba(10,18,34,0.4)"] } },
-                axisLine: { lineStyle: { color: C.line } },
-              },
-              series: [
-                {
-                  type: "radar",
-                  data: [
-                    { name: g.away.name, value: axes.map((a) => norm(a.k, f[`a_${a.k}`], a.inv)), lineStyle: { color: pairColors(g.away, g.home)[0] }, itemStyle: { color: pairColors(g.away, g.home)[0] }, areaStyle: { opacity: 0.18 } },
-                    { name: g.home.name, value: axes.map((a) => norm(a.k, f[`h_${a.k}`], a.inv)), lineStyle: { color: pairColors(g.away, g.home)[1] }, itemStyle: { color: pairColors(g.away, g.home)[1] }, areaStyle: { opacity: 0.18 } },
-                  ],
-                },
-              ],
-            }}
-          />
-        ) : (
-          <Skeleton className="m-2 h-[240px]" />
-        )}
+    <div className="space-y-3">
+      <Panel>
+        <StatStrip className="border-0">
+          <Stat label="On the board" value={rows.length || "–"} sub={`${nba} NBA · ${cbb} NCAA · next 40h`} />
+          <Stat label="Live now" value={live.length} tone={live.length ? "loss" : undefined} sub={live[0] ? `${live[0].away.abbr} ${live[0].away_score}–${live[0].home_score} ${live[0].home.abbr}` : "none in progress"} />
+          <Stat label="Graded forecasts" value={total ? total.decided.toLocaleString() : "–"} sub={`${perf.data?.pending ?? 0} open`} />
+          <Stat label="Moneyline" value={bm.moneyline ? pct(bm.moneyline.win_pct, 1) : "–"} sub={bm.moneyline ? `${bm.moneyline.wins}–${bm.moneyline.losses}` : ""} />
+          <Stat label="Spread" value={bm.spread ? pct(bm.spread.win_pct, 1) : "–"} sub={bm.spread ? `${bm.spread.wins}–${bm.spread.losses} vs close` : ""} hint="Against the DraftKings closing line; 52.4% breaks even at −110" />
+          <Stat label="Total" value={bm.total ? pct(bm.total.win_pct, 1) : "–"} sub={bm.total ? `${bm.total.wins}–${bm.total.losses} vs close` : ""} />
+          <Stat label="ROI, priced picks" value={total?.roi != null ? `${total.roi >= 0 ? "+" : ""}${(total.roi * 100).toFixed(1)}%` : "–"} tone={total?.roi != null ? (total.roi >= 0 ? "gain" : "loss") : undefined} sub="flat 1 unit" />
+        </StatStrip>
+      </Panel>
+
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <Panel>
+          <PanelHeader title="Slate: model against the market" eyebrow="sort by Δ to find disagreements" right={<SourceStamp source="ESPN · DraftKings" at={board.data?.generated_at} demo={board.data?.demo} />} />
+          {board.isLoading ? <Skeleton className="m-3 h-[380px]" /> : rows.length ? <Slate rows={rows} /> : <Empty title="No games in the next 40 hours" />}
+        </Panel>
+        <div className="space-y-3">
+          <Panel>
+            <PanelHeader title="Largest disagreements" right={<Link href="/markets" className="text-xs text-muted hover:text-fg">Markets →</Link>} />
+            <div className="divide-y divide-hair">
+              {disagreements.map((x) => {
+                const g = x.r.game;
+                const spreadBig = Math.abs(x.dSpread ?? 0) >= Math.abs(x.dTotal ?? 0) / 2;
+                return (
+                  <Link key={g.id} href={`/games/${g.id}`} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-3 py-1.5 text-sm hover:bg-raised">
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <TeamCrest team={g.away} size={15} />
+                      <span className="truncate text-fg-2">
+                        {g.away.abbr} @ {g.home.abbr}
+                      </span>
+                      <span className="text-2xs text-subtle">{timeShort(g.start_time)}</span>
+                    </span>
+                    <span className="num text-xs">
+                      {spreadBig ? (
+                        <>
+                          <span className="text-subtle">sprd</span> {spreadLine(x.modelSpread)} <span className="text-subtle">vs</span> {spreadLine(x.closeSpread)}
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-subtle">tot</span> {num(x.modelTotal, 1)} <span className="text-subtle">vs</span> {num(x.closeTotal, 1)}
+                        </>
+                      )}
+                    </span>
+                  </Link>
+                );
+              })}
+              {!disagreements.length && <Empty title="No market lines posted yet" />}
+            </div>
+          </Panel>
+          <Panel>
+            <PanelHeader title="Track record" eyebrow={perf.data?.rolling_window ? `rolling ${perf.data.rolling_window} forecasts` : undefined} right={<Link href="/picks" className="text-xs text-muted hover:text-fg">Picks →</Link>} />
+            <div className="px-1 pt-1">
+              <Track perf={perf.data} />
+            </div>
+          </Panel>
+        </div>
       </div>
-      <p className="px-4 pb-3 text-[11px] text-mist-500">Pre-game, opponent-adjusted profiles (point-in-time). Defence and ball security are inverted so outward is better.</p>
-    </Panel>
+
+      <div className="grid gap-3 lg:grid-cols-2">
+        <Panel>
+          <PanelHeader title="Latest graded forecasts" right={<Link href="/picks?tab=archive" className="text-xs text-muted hover:text-fg">Archive →</Link>} />
+          <div className="max-h-[320px] divide-y divide-hair overflow-y-auto">
+            {(recent.data ?? []).slice(0, 30).map((p) => (
+              <Link key={p.id} href={`/games/${p.game_id}`} className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 px-3 py-1.5 text-sm hover:bg-raised">
+                <span className="min-w-0 truncate text-fg-2">
+                  {p.away.abbr} @ {p.home.abbr} <span className="text-subtle">· {MARKET_LABEL[p.market] ?? p.market}</span>
+                </span>
+                <span className="num text-xs text-muted">
+                  {p.selection} {p.line != null ? p.line : ""} · {pct(p.predicted_prob, 0)}
+                </span>
+                <ResultBadge result={p.result} />
+              </Link>
+            ))}
+            {!recent.isLoading && !(recent.data ?? []).length && <Empty title="No graded forecasts yet" />}
+          </div>
+        </Panel>
+        <Panel>
+          <PanelHeader title="Projected scorers, next 30 hours" eyebrow="NBA · model mean, 80% range" right={<Link href="/markets?tab=props" className="text-xs text-muted hover:text-fg">Props →</Link>} />
+          <div className="max-h-[320px] divide-y divide-hair overflow-y-auto">
+            {[...(props.data?.props ?? [])]
+              .filter((p) => !p.injury_out && p.markets.pts && p.player && p.game)
+              .sort((a, b) => b.markets.pts.mean - a.markets.pts.mean)
+              .slice(0, 30)
+              .map((p) => (
+                <Link key={`${p.player!.id}-${p.game!.id}`} href={`/players/${p.player!.id}`} className="grid grid-cols-[28px_minmax(0,1fr)_auto_auto] items-center gap-2 px-3 py-1 text-sm hover:bg-raised">
+                  <PlayerPortrait player={p.player!} size={26} />
+                  <span className="min-w-0 truncate text-fg-2">
+                    {p.player!.name} <span className="text-2xs text-subtle">{p.player!.team?.abbr}</span>
+                  </span>
+                  <span className="num text-fg">{num(p.markets.pts.mean, 1)}</span>
+                  <span className="num w-16 text-right text-2xs text-subtle">
+                    {num(p.markets.pts.p10, 0)}–{num(p.markets.pts.p90, 0)}
+                  </span>
+                </Link>
+              ))}
+            {league === "CBB" && <Empty title="Player projections cover the NBA" />}
+            {league !== "CBB" && !props.isLoading && !(props.data?.props ?? []).length && <Empty title="No player projections in the next 30 hours" />}
+          </div>
+        </Panel>
+      </div>
+    </div>
   );
 }
 
-function MarketTable({ rows }: { rows: BoardRow[] }) {
+export default function Page() {
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[760px] text-[12.5px]">
-        <thead>
-          <tr className="border-b border-line/70">
-            {["Matchup", "Status", "Spread (home) Vegas → Model", "Cover %", "Total Vegas → Model", "Over %", "Win % (home)", "Best EV"].map((h) => (
-              <th key={h} className="label px-3 py-2 text-left">
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => {
-            const sp = r.vs_market.spread;
-            const t = r.vs_market.total;
-            const evs = [sp?.ev_home, sp?.ev_away, t?.ev_over, t?.ev_under].filter((x): x is number => x != null);
-            const best = evs.length ? Math.max(...evs) : null;
-            return (
-              <tr key={r.game.id} className="border-b border-line/40 hover:bg-volt/[0.04]">
-                <td className="px-3 py-2">
-                  <Link href={`/games/${r.game.id}`} className="flex items-center gap-2 hover:text-volt-300">
-                    <TeamCrest team={r.game.away} size={18} />
-                    <span className="text-mist">{r.game.away.abbr}</span>
-                    <span className="text-mist-500">@</span>
-                    <TeamCrest team={r.game.home} size={18} />
-                    <span className="text-mist">{r.game.home.abbr}</span>
-                    <Badge className="ml-1" tone={r.game.league === "NBA" ? "volt" : "cyan"}>
-                      {r.game.league}
-                    </Badge>
-                  </Link>
-                </td>
-                <td className="px-3 py-2">
-                  <StatusPill g={r.game} />
-                </td>
-                <td className="whitespace-nowrap px-3 py-2 font-mono tabular">
-                  <span className="text-mist-400">{sp ? spreadLine(sp.market_line_home) : "—"}</span> <span className="text-mist-500">→</span> <span className="text-volt-300">{spreadLine(r.projected.spread_home)}</span>
-                </td>
-                <td className="px-3 py-2 font-mono tabular text-mist-300">{sp ? pct(sp.p_home_cover, 0) : "—"}</td>
-                <td className="whitespace-nowrap px-3 py-2 font-mono tabular">
-                  <span className="text-mist-400">{t ? num(t.market_line) : "—"}</span> <span className="text-mist-500">→</span> <span className="text-volt-300">{num(r.projected.total)}</span>
-                </td>
-                <td className="px-3 py-2 font-mono tabular text-mist-300">{t ? pct(t.p_over, 0) : "—"}</td>
-                <td className="px-3 py-2 font-mono tabular text-mist-300">{pct(r.simulation.win_prob_home, 0)}</td>
-                <td className={cn("px-3 py-2 font-mono tabular", best != null && best > 0 ? "text-gain" : "text-mist-500")}>{best != null ? `${signed(best * 100, 1)}%` : "—"}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+    <Suspense fallback={<Skeleton className="h-[60vh]" />}>
+      <CommandCenter />
+    </Suspense>
   );
 }

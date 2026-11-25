@@ -66,6 +66,18 @@ jobs:
           npm ci
           npm run build
           touch out/.nojekyll
+      - name: Browser tests (desktop, tablet, mobile)
+        working-directory: frontend
+        run: |
+          npx playwright install --with-deps chromium
+          BASE_PATH="$BASE" CI=1 npx playwright test
+      - name: Upload test report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: frontend/playwright-report
+          retention-days: 7
       - name: Publish to the gh-pages branch
         working-directory: frontend/out
         run: |

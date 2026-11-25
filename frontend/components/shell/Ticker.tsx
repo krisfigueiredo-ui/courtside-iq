@@ -1,108 +1,71 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
 
 import { TeamCrest } from "@/components/identity/identity";
-import { LiveDot, Segmented } from "@/components/ui/primitives";
+import { LiveDot } from "@/components/ui/primitives";
 import { cn, periodLabel, timeShort } from "@/lib/format";
 import { useTicker } from "@/lib/hooks";
+import { usePrefs } from "@/lib/store";
 import type { Game } from "@/lib/types";
 
-function TickerItem({ g }: { g: Game }) {
+function Cell({ g }: { g: Game }) {
   const live = g.status === "live";
   const final = g.status === "final";
-  const pl = periodLabel(g.league, g.period, g.clock, g.status);
-  const hs = g.home_score ?? null;
-  const as = g.away_score ?? null;
-  const awayLead = final && as != null && hs != null && as > hs;
-  const homeLead = final && as != null && hs != null && hs > as;
-  const wp = g.model?.win_prob_home;
+  const hs = g.home_score;
+  const as = g.away_score;
+  const lead = (s: number | null, o: number | null) => s != null && o != null && s > o;
   return (
     <Link
       href={`/games/${g.id}`}
-      className={cn(
-        "group flex shrink-0 items-center gap-3 rounded-lg border border-transparent px-3 py-1.5 transition-colors hover:border-volt/30 hover:bg-volt/[0.06]",
-        live && "bg-loss/[0.04]",
-      )}
+      className={cn("flex h-full shrink-0 items-center gap-2.5 border-r border-hair px-3 hover:bg-raised", live && "bg-live/[0.04]")}
+      aria-label={`${g.away.name} ${as ?? ""} at ${g.home.name} ${hs ?? ""}, ${g.status}`}
     >
-      <div className="flex flex-col gap-0.5">
+      <div className="grid grid-cols-[14px_34px_24px] items-center gap-x-1.5 gap-y-0.5 text-xs">
         {[
-          { t: g.away, s: as, lead: awayLead },
-          { t: g.home, s: hs, lead: homeLead },
-        ].map(({ t, s, lead }) => (
-          <div key={t.id} className="flex items-center gap-1.5">
-            <TeamCrest team={t} size={15} ring={false} />
-            <span className={cn("w-11 truncate text-[11.5px] font-semibold", final && !lead ? "text-mist-400" : "text-mist")}>{t.abbr}</span>
-            <span className={cn("w-7 text-right font-mono text-[11.5px] tabular", final && !lead ? "text-mist-400" : "text-mist", live && "text-white")}>{s ?? ""}</span>
+          { t: g.away, s: as, w: lead(as, hs) },
+          { t: g.home, s: hs, w: lead(hs, as) },
+        ].map(({ t, s, w }) => (
+          <div key={t.id} className="contents">
+            <TeamCrest team={t} size={14} />
+            <span className={cn("truncate font-medium", final && !w ? "text-subtle" : "text-fg")}>{t.abbr}</span>
+            <span className={cn("num text-right", final && !w ? "text-subtle" : "text-fg", live && "font-medium")}>{s ?? ""}</span>
           </div>
         ))}
       </div>
-      <div className="flex w-[68px] flex-col items-start gap-0.5">
-        <span className="flex items-center gap-1 text-[9.5px] font-bold uppercase tracking-wider text-mist-500">
-          {g.league}
-          {g.is_demo && <span className="text-flare/80">· demo</span>}
-        </span>
+      <div className="num flex w-12 flex-col items-start gap-0.5 text-2xs leading-4">
         {live ? (
-          <span className="flex items-center gap-1.5 font-mono text-[10.5px] font-semibold text-loss">
-            <LiveDot /> {pl}
+          <span className="flex items-center gap-1 text-live">
+            <LiveDot />
+            {periodLabel(g.league, g.period, g.clock, g.status)}
           </span>
         ) : final ? (
-          <span className="font-mono text-[10.5px] font-semibold text-mist-400">FINAL</span>
+          <span className="text-subtle">Final</span>
         ) : (
-          <span className="font-mono text-[10.5px] text-mist-300">{timeShort(g.start_time)}</span>
+          <span className="text-fg-2">{timeShort(g.start_time)}</span>
         )}
-        {wp != null && !final && (
-          <span className="font-mono text-[9.5px] text-volt-300">
-            {wp >= 0.5 ? g.home.abbr : g.away.abbr} {Math.round(Math.max(wp, 1 - wp) * 100)}%
-          </span>
-        )}
+        <span className="text-subtle">{g.league === "CBB" ? "NCAA" : "NBA"}</span>
       </div>
     </Link>
   );
 }
 
+/** Score strip under the top bar. Follows the global league filter. */
 export function Ticker() {
-  const [league, setLeague] = useState<"ALL" | "NBA" | "CBB">("ALL");
-  const { data, transport } = useTicker(league === "ALL" ? undefined : league);
-  const games = data?.games ?? [];
+  const league = usePrefs((s) => s.league);
+  const { data, isLoading } = useTicker(league === "ALL" ? undefined : league);
+  const games = [...(data?.games ?? [])].sort((a, b) => {
+    const rank = (g: Game) => (g.status === "live" ? 0 : g.status === "scheduled" ? 1 : 2);
+    return rank(a) - rank(b) || Date.parse(a.start_time) - Date.parse(b.start_time);
+  });
   return (
-    <div className="sticky top-0 z-40 border-b border-line bg-ink-950/90 backdrop-blur-md">
-      <div className="flex h-[58px] items-center gap-3 px-3">
-        <div className="hidden shrink-0 items-center gap-2 sm:flex">
-          <Segmented
-            size="sm"
-            value={league}
-            onChange={setLeague}
-            options={[
-              { value: "ALL", label: "All" },
-              { value: "NBA", label: "NBA" },
-              { value: "CBB", label: "CBB" },
-            ]}
-          />
-        </div>
-        <div className="no-scrollbar mask-fade-x flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
-          {games.length === 0 && <div className="px-3 text-xs text-mist-500">No games in the current window.</div>}
-          {games.map((g) => (
-            <TickerItem key={g.id} g={g} />
-          ))}
-        </div>
-        <div className="hidden shrink-0 items-center gap-1.5 text-[10px] text-mist-500 lg:flex" title={`Ticker transport: ${transport}`}>
-          <span className={cn("h-1.5 w-1.5 rounded-full", transport === "stream" ? "bg-gain" : transport === "snapshot" ? "bg-gain" : "bg-gold")} />
-          {transport === "stream" ? "Live stream" : transport === "snapshot" ? "ESPN scores" : "Polling"}
-        </div>
-      </div>
-      <div className="flex gap-1 px-3 pb-2 sm:hidden">
-        <Segmented
-          size="sm"
-          value={league}
-          onChange={setLeague}
-          options={[
-            { value: "ALL", label: "All" },
-            { value: "NBA", label: "NBA" },
-            { value: "CBB", label: "CBB" },
-          ]}
-        />
+    <div className="h-11 shrink-0 border-b border-hair bg-surface">
+      <div className="no-scrollbar flex h-full overflow-x-auto" role="list" aria-label="Scores">
+        {isLoading && <div className="skeleton m-2 h-7 w-[60%]" />}
+        {!isLoading && games.length === 0 && <div className="flex items-center px-3 text-xs text-subtle">No games in the current window.</div>}
+        {games.map((g) => (
+          <Cell key={g.id} g={g} />
+        ))}
       </div>
     </div>
   );

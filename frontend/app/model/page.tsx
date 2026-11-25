@@ -6,7 +6,7 @@ import { useMemo, useState } from "react";
 
 import { C, EChart, SERIES, baseAxis, tooltip } from "@/components/charts/EChart";
 import { DistributionChart } from "@/components/game/game";
-import { Badge, Button, Empty, KV, PageHeader, Panel, PanelHeader, Segmented, Skeleton, Stat } from "@/components/ui/primitives";
+import { Badge, Button, Empty, KV, PageHeader, Panel, PanelHeader, Segmented, Skeleton, Stat, StatStrip } from "@/components/ui/primitives";
 import { STATIC, STATIC_MESSAGE, api, useApi } from "@/lib/api";
 import { cn, dateTime, featureLabel, num, pct, signed } from "@/lib/format";
 import type { BoardRow } from "@/lib/types";
@@ -25,9 +25,7 @@ export default function ModelIntelligence() {
   return (
     <div className="space-y-6">
       <PageHeader
-        index="10"
         title="Model Intelligence"
-        subtitle="League-specific LightGBM + CatBoost ensembles with XGBoost benchmarks, strict chronological validation, calibration, SHAP explanations and Monte Carlo simulation."
         right={
           <>
             <Segmented value={league} onChange={(v) => { setLeague(v); setSel(null); }} options={[{ value: "NBA", label: "NBA" }, { value: "CBB", label: "CBB" }]} />
@@ -99,16 +97,18 @@ function GameModelCard({ m }: { m: any }) {
           <FlaskConical className="h-4 w-4" /> Trained and evaluated on synthetic demo seasons. These metrics describe the simulator, not real basketball. Import real history (Data Management) or connect a provider and retrain.
         </div>
       )}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-8">
-        <Panel className="p-4"><Stat label="Margin MAE" value={num(t.margin.mae, 2)} sub={`RMSE ${num(t.margin.rmse, 2)}`} tone="volt" /></Panel>
-        <Panel className="p-4"><Stat label="Total MAE" value={num(t.total.mae, 2)} sub={`RMSE ${num(t.total.rmse, 2)}`} tone="volt" /></Panel>
-        <Panel className="p-4"><Stat label="1H total MAE" value={num(t.h1_total.mae, 2)} /></Panel>
-        <Panel className="p-4"><Stat label="Win Brier" value={num(t.win_calibrated.brier, 3)} sub={`raw ${num(t.win_raw.brier, 3)}`} /></Panel>
-        <Panel className="p-4"><Stat label="Win log loss" value={num(t.win_calibrated.log_loss, 3)} /></Panel>
-        <Panel className="p-4"><Stat label="ECE" value={num(t.win_calibrated.ece, 3)} sub={`raw ${num(t.win_raw.ece, 3)}`} /></Panel>
-        <Panel className="p-4"><Stat label="Winner hit rate" value={pct(t.win_calibrated.hit_rate)} sub={`CI ${pct(t.win_calibrated.hit_rate_ci[0], 0)}–${pct(t.win_calibrated.hit_rate_ci[1], 0)}`} /></Panel>
-        <Panel className="p-4"><Stat label="Test games" value={t.margin.n} sub={`${mt.split.test[0].slice(0, 10)} → ${mt.split.test[1].slice(0, 10)}`} /></Panel>
-      </div>
+      <Panel>
+        <StatStrip className="border-0">
+        <Stat label="Margin MAE" value={num(t.margin.mae, 2)} sub={`RMSE ${num(t.margin.rmse, 2)}`} tone="volt" />
+        <Stat label="Total MAE" value={num(t.total.mae, 2)} sub={`RMSE ${num(t.total.rmse, 2)}`} tone="volt" />
+        <Stat label="1H total MAE" value={num(t.h1_total.mae, 2)} />
+        <Stat label="Win Brier" value={num(t.win_calibrated.brier, 3)} sub={`raw ${num(t.win_raw.brier, 3)}`} />
+        <Stat label="Win log loss" value={num(t.win_calibrated.log_loss, 3)} />
+        <Stat label="ECE" value={num(t.win_calibrated.ece, 3)} sub={`raw ${num(t.win_raw.ece, 3)}`} />
+        <Stat label="Winner hit rate" value={pct(t.win_calibrated.hit_rate)} sub={`CI ${pct(t.win_calibrated.hit_rate_ci[0], 0)}–${pct(t.win_calibrated.hit_rate_ci[1], 0)}`} />
+        <Stat label="Test games" value={t.margin.n} sub={`${mt.split.test[0].slice(0, 10)} → ${mt.split.test[1].slice(0, 10)}`} />
+        </StatStrip>
+      </Panel>
       <div className="grid gap-4 lg:grid-cols-3">
         <Panel>
           <PanelHeader eyebrow="Benchmarks (held-out test)" title="MAE: lower is better" />

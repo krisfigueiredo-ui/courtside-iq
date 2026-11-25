@@ -8,7 +8,7 @@ import { C, EChart, baseAxis } from "@/components/charts/EChart";
 import { MatchupCard, StatusPill } from "@/components/game/game";
 import { PlayerPortrait, RosterBadge, TeamCrest, TeamName } from "@/components/identity/identity";
 import { DataTable } from "@/components/ui/DataTable";
-import { Badge, Empty, PageHeader, Panel, PanelHeader, Skeleton, SourceStamp, Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/primitives";
+import { Badge, Empty, ViewBar, Panel, PanelHeader, Skeleton, SourceStamp, Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/primitives";
 import { useApi } from "@/lib/api";
 import { num, pct } from "@/lib/format";
 import type { BoardRow, Game, League, Player, Team } from "@/lib/types";
@@ -69,14 +69,9 @@ export function LeagueCenter({ league }: { league: League }) {
   const games = board.data?.games ?? [];
   return (
     <div className="space-y-6">
-      <PageHeader
+      <ViewBar
         index={isNBA ? "02" : "03"}
         title={isNBA ? "NBA Game Center" : "College Basketball Center"}
-        subtitle={
-          isNBA
-            ? "Schedules, live games, projections, efficiency standings and matchup analytics for all 30 franchises."
-            : "Division I schools by conference: schedules, adjusted efficiency, sample-size-aware projections and neutral-site handling."
-        }
         right={<SourceStamp source={table.data?.source} at={board.data?.generated_at} demo={board.data?.demo} />}
       />
       <Tabs defaultValue="slate">

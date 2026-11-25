@@ -5,12 +5,25 @@ import Link from "next/link";
 import { C, EChart, baseAxis, tooltip } from "@/components/charts/EChart";
 import { StatusPill } from "@/components/game/game";
 import { PlayerPortrait, RosterBadge, TeamCrest } from "@/components/identity/identity";
-import { Badge, DemoBadge, Empty, ErrorState, Panel, PanelHeader, Skeleton, Stat } from "@/components/ui/primitives";
+import { Badge, DemoBadge, Empty, ErrorState, Panel, PanelHeader, Skeleton, Stat, StatStrip } from "@/components/ui/primitives";
 import { useApi } from "@/lib/api";
-import { num, signed } from "@/lib/format";
+import { useSelection } from "@/lib/store";
+import { StreakCell } from "@/components/views/StreaksView";
+import { useEffect } from "react";
+import { num, pct, signed } from "@/lib/format";
 
 export default function TeamView({ id }: { id: string }) {
   const q = useApi<any>(`/api/teams/${id}`);
+  const lg = q.data?.team?.league;
+  const st = useApi<{ rows: any[] }>(lg ? `/api/performance/streaks?by=team&market=all&league=${lg}` : null);
+  const streak = st.data?.rows.find((r) => r.team_id === Number(id));
+  const pst = useApi<{ rows: any[] }>(lg === "NBA" ? "/api/performance/streaks?by=player&league=NBA&market=all" : null);
+  const pform = pst.data ? new Map<number, any>(pst.data.rows.map((r) => [r.player_id, r.form])) : null;
+  const select = useSelection((x) => x.select);
+  const team = q.data?.team;
+  useEffect(() => {
+    if (team) select({ team: { id: team.id, label: team.name } });
+  }, [team, select]);
   if (q.error) return <ErrorState error={q.error} />;
   if (!q.data) return <Skeleton className="h-[500px]" />;
   const t = q.data.team;
@@ -18,35 +31,36 @@ export default function TeamView({ id }: { id: string }) {
   const w = tr.windows?.["10"];
   const games = tr.games ?? [];
   return (
-    <div className="space-y-6">
-      <Panel className="relative overflow-hidden">
-        <div className="pointer-events-none absolute inset-0 opacity-35" style={{ background: `linear-gradient(110deg, ${t.primary}cc 0%, ${t.secondary}22 45%, transparent 70%)` }} />
-        <div className="grid-bg pointer-events-none absolute inset-0 opacity-40" />
-        <div className="relative flex flex-col gap-5 p-6 md:flex-row md:items-center">
-          <TeamCrest team={t} size={110} />
-          <div className="flex-1">
-            <div className="flex items-center gap-2">
-              <Badge tone={t.league === "NBA" ? "volt" : "cyan"}>{t.league}</Badge>
-              <span className="text-xs text-mist-300">{t.conference_name ?? t.conference} {t.division ? `· ${t.division}` : ""}</span>
-              <DemoBadge show={tr.is_demo} />
+    <div className="space-y-3">
+      <Panel>
+        <div className="flex flex-col gap-3 p-3 md:flex-row md:items-center">
+          <TeamCrest team={t} size={56} />
+          <div className="min-w-0 flex-1">
+            <h1 className="text-[19px] font-semibold tracking-[-0.01em] text-fg">{t.name}</h1>
+            <div className="text-xs text-muted">
+              {t.league === "CBB" ? "NCAA" : "NBA"} · {t.conference_name ?? t.conference}
+              {t.division ? ` · ${t.division}` : ""}
+              {t.venue ? ` · ${t.venue}` : ""}
             </div>
-            <h1 className="mt-1 font-display text-4xl font-semibold tracking-tight text-white">{t.location}</h1>
-            <div className="text-lg text-mist-300">{t.nickname}</div>
-            {t.venue && <div className="mt-1 text-xs text-mist-400">{t.venue}</div>}
+            <DemoBadge show={tr.is_demo} />
           </div>
-          {w && (
-            <div className="grid grid-cols-4 gap-4 md:w-[480px]">
-              <Stat label="ORtg L10" value={num(w.ortg)} />
-              <Stat label="DRtg L10" value={num(w.drtg)} />
-              <Stat label="Net L10" value={signed(w.ortg - w.drtg)} tone={w.ortg - w.drtg >= 0 ? "gain" : "loss"} />
-              <Stat label="Pace L10" value={num(w.pace)} />
-            </div>
-          )}
         </div>
+        {w && (
+          <StatStrip>
+            <Stat label="ORtg L10" value={num(w.ortg)} />
+            <Stat label="DRtg L10" value={num(w.drtg)} />
+            <Stat label="Net L10" value={signed(w.ortg - w.drtg)} tone={w.ortg - w.drtg >= 0 ? "gain" : "loss"} />
+            <Stat label="Pace L10" value={num(w.pace)} />
+            {streak?.results && <Stat label="Straight up" value={streak.results.su.record} sub={<>streak <StreakCell s={streak.results.su.current} /></>} />}
+            {streak?.results && <Stat label="ATS vs close" value={streak.results.ats.record} sub={<>streak <StreakCell s={streak.results.ats.current} /></>} />}
+            {streak?.results && <Stat label="Over / under" value={streak.results.ou.record} sub={<>streak <StreakCell s={streak.results.ou.current} neutral /></>} />}
+            {streak?.model && <Stat label="Model on this team" value={`${streak.model.wins}-${streak.model.losses}`} sub={<>{pct(streak.model.hit_rate, 0)} · streak <StreakCell s={streak.model.current} /></>} />}
+          </StatStrip>
+        )}
       </Panel>
-      <div className="grid gap-6 xl:grid-cols-[1fr_380px]">
+      <div className="grid gap-3 xl:grid-cols-[1fr_380px]">
         <Panel>
-          <PanelHeader eyebrow={`${tr.season ?? ""} · n=${tr.n_season ?? 0}`} title="Margin by game with 5-game rolling net rating" right={<Link href="/trends" className="text-xs text-volt-300 hover:underline">Trends Lab</Link>} />
+          <PanelHeader eyebrow={`${tr.season ?? ""} · n=${tr.n_season ?? 0}`} title="Margin by game with 5-game rolling net rating" right={<Link href="/research" className="text-xs text-volt-300 hover:underline">Research Lab</Link>} />
           <div className="p-2">
             {games.length ? (
               <EChart
@@ -91,22 +105,49 @@ export default function TeamView({ id }: { id: string }) {
       <Panel>
         <PanelHeader eyebrow="Roster" title={t.league === "NBA" ? "Players" : "Roster"} />
         {q.data.roster.length ? (
-          <div className="grid gap-3 p-3 sm:grid-cols-2 lg:grid-cols-4">
-            {q.data.roster.map((p: any) => (
-              <Link key={p.id} href={`/players/${p.id}`} className="panel panel-hover flex items-center gap-3 p-3">
-                <PlayerPortrait player={p} size={52} />
-                <div className="min-w-0">
-                  <div className="truncate font-medium text-mist">{p.name}</div>
-                  <div className="text-xs text-mist-400">
-                    {p.position} {p.jersey ? `· #${p.jersey}` : ""}
-                  </div>
-                  <RosterBadge player={p} />
-                </div>
-              </Link>
-            ))}
-          </div>
+          <table className="dt w-full border-separate border-spacing-0">
+            <thead>
+              <tr>
+                <th>Player</th>
+                <th>Pos</th>
+                <th className="text-right">#</th>
+                {pform && ["G", "MIN", "PTS", "REB", "AST", "PTS vs avg"].map((h) => <th key={h} className="text-right">{h}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {[...q.data.roster]
+                .sort((a: any, b: any) => (pform?.get(b.id)?.stats?.pts?.avg ?? -1) - (pform?.get(a.id)?.stats?.pts?.avg ?? -1))
+                .map((p: any) => {
+                  const f = pform?.get(p.id);
+                  const cur = f?.stats?.pts?.current;
+                  return (
+                    <tr key={p.id}>
+                      <td>
+                        <Link href={`/players/${p.id}`} className="flex items-center gap-2 text-fg hover:underline">
+                          <PlayerPortrait player={p} size={26} /> {p.name}
+                        </Link>
+                      </td>
+                      <td className="text-muted">{p.position ?? "–"}</td>
+                      <td className="num text-right text-muted">{p.jersey ?? "–"}</td>
+                      {pform && (
+                        <>
+                          <td className="num text-right">{f?.games ?? "–"}</td>
+                          <td className="num text-right">{f ? num(f.minutes, 1) : "–"}</td>
+                          <td className="num text-right text-fg">{f ? num(f.stats.pts.avg, 1) : "–"}</td>
+                          <td className="num text-right">{f ? num(f.stats.reb.avg, 1) : "–"}</td>
+                          <td className="num text-right">{f ? num(f.stats.ast.avg, 1) : "–"}</td>
+                          <td className="text-right">
+                            <StreakCell s={cur ? `${cur[0] === "A" ? "▲" : "▼"}${cur.slice(1)}` : null} />
+                          </td>
+                        </>
+                      )}
+                    </tr>
+                  );
+                })}
+            </tbody>
+          </table>
         ) : (
-          <Empty title="No roster loaded">{t.league === "CBB" ? "College rosters load from a connected provider with NCAA coverage." : "Sync rosters from BALLDONTLIE to populate the full roster."}</Empty>
+          <Empty title="No roster loaded">{t.league === "CBB" ? "College rosters are not part of the ESPN feed used here." : "Rosters sync from ESPN every six hours."}</Empty>
         )}
       </Panel>
     </div>

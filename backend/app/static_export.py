@@ -52,6 +52,9 @@ def static_paths() -> list[str]:
         paths += _leagues(p)
     for by in ("market", "team", "player", "conference"):
         paths += _leagues(f"/api/performance/breakdown?by={by}", "&")
+    for by in ("team", "player", "conference"):
+        for mk in ("all", "moneyline", "spread", "total"):
+            paths += _leagues(f"/api/performance/streaks?by={by}&market={mk}", "&")
     paths += _leagues("/api/predictions?limit=60&settled=true&games_only=true", "&")
     paths += _leagues("/api/predictions?limit=1500", "&")
     for lg in ("NBA", "CBB"):

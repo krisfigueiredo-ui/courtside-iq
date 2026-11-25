@@ -32,29 +32,29 @@ Basketball analytics platform for the NBA and NCAA Division I men's basketball, 
 
 ## Features
 
-| Area | Highlights |
+| Workspace | What it does |
 |---|---|
-| Command Center | Live ticker (Server-Sent Events), featured matchups, model vs market outlook, prop signals, rolling accuracy |
-| NBA and College centers | Slates, schedules, efficiency standings, team directories by conference, rosters |
-| Live Analytics | Game state, pace vs projection, in-game win probability and projected totals |
-| Game Totals Lab | Estimated possessions, simulated score distributions, first-half and team totals |
-| Spreads and Odds | Book-by-book line screen, cover and push probabilities, alternate-line ladder, line movement, no-vig calculator |
-| Player Props Lab | Minutes model, per-stat probability distributions, correlation between stats, prop history |
-| Trends Lab | Team and player rolling windows with sample sizes, splits, ATS and over/under history, heatmaps, correlation matrix |
-| Picks Tracker | Permanent forecast archive, calibration, accuracy by market/team/player/conference, closing line value, personal picks journal, error diagnostics |
-| Model Intelligence | Version registry and comparison, held-out metrics, benchmarks, walk-forward and season-by-season backtests, SHAP explanations, Optuna tuning, simulation explorer |
-| Data Management | CSV/XLSX/JSON import with validation, quarantine and approval; formatted exports |
-| COURTSIDE AI | Claude-based assistant with read-only database tools, semantic retrieval and record citations |
+| Command Center | Today's slate as one sortable table of model against market (spread, total, win probability, deltas), largest disagreements, rolling track record, latest graded forecasts, projected scorers |
+| Live Games | Live terminal per game: scoreboard and linescore, ESPN's per-play win probability with the score margin underneath and the model's pre-game line, inferred possession, live pace against expected pace, interactive shot chart with zone splits, virtualised play-by-play, player box score. NBA and NCAA tabs hold slates, schedules, efficiency standings and directories |
+| Market Intelligence | Line screen with model lines, cover and push probabilities, EV and no-vig prices; line movement on TradingView Lightweight Charts (open, every observed change, close, model price line); totals lab; player prop distributions |
+| Research Lab | Team and player trends, sortable directories with conference filters, team and player comparisons, data import and export |
+| Picks & Performance | Graded forecast archive, calibration, accuracy by market, streaks and splits by team, player and conference (current and longest runs, last 10, over/under splits, results against the closing line), closing line value, picks journal, error analysis |
+| Model Intelligence | Version registry and comparison, held-out metrics and benchmarks, walk-forward and season backtests, reliability diagrams, feature importance, SHAP explanations, Optuna tuning, simulation explorer |
+| COURTSIDE AI | Collapsible side panel that knows the selected game, team, player and market; answers separate verified data, model estimates and interpretation, with record citations |
+
+Global search and a command palette (`⌘K` or `/`) jump to any game, team, player or workspace. A league filter, the data status (source, build time, freshness, active models) and a light or dark theme live in the top bar.
 
 ## Screenshots
 
-| Game detail | Player props |
+| Live Games | Game detail |
 |---|---|
-| ![Game detail](docs/screenshots/game-detail.png) | ![Player props](docs/screenshots/player-props.png) |
-| **Model Intelligence** | **Picks Tracker** |
-| ![Model Intelligence](docs/screenshots/model-intelligence.png) | ![Picks Tracker](docs/screenshots/picks-tracker.png) |
-| **Spreads and odds** | **Data Management** |
-| ![Spreads and odds](docs/screenshots/spreads-odds.png) | ![Data Management](docs/screenshots/data-management.png) |
+| ![Live Games](docs/screenshots/live-games.png) | ![Game detail](docs/screenshots/game-detail.png) |
+| **Streaks & splits** | **Market Intelligence** |
+| ![Streaks and splits](docs/screenshots/streaks.png) | ![Market Intelligence](docs/screenshots/markets.png) |
+| **Model Intelligence** | **Team page** |
+| ![Model Intelligence](docs/screenshots/model-intelligence.png) | ![Team page](docs/screenshots/team.png) |
+| **Light theme** | |
+| ![Live Games, light theme](docs/screenshots/live-games-light.png) | |
 
 <img src="docs/screenshots/mobile.png" alt="Mobile game view" width="300">
 
@@ -79,7 +79,7 @@ courtside-iq/
 │   ├── data/espn_snapshot/  Committed real dataset (gzipped CSV + manifest)
 │   ├── data/demo_snapshot/  Synthetic dataset used by the test suite
 │   └── tests/               Backend test suite
-├── frontend/                Next.js 15, TypeScript, Tailwind, Radix UI, Framer Motion, ECharts, TanStack
+├── frontend/                Next.js 15 app: workspaces, design system, charts, Storybook stories, Playwright tests
 ├── docs/                    Deployment guide, dataset reference, screenshots
 ├── .github/workflows/       CI and GitHub Pages preview deployment
 └── docker-compose.yml       PostgreSQL + pgvector, Redis, API, worker, web
@@ -91,7 +91,8 @@ courtside-iq/
 | Storage | PostgreSQL 16 with pgvector (SQLite supported for development), Redis cache |
 | Modeling | LightGBM, CatBoost, XGBoost (benchmark), scikit-learn, SHAP, Optuna, NumPy, pandas, SciPy |
 | AI | Anthropic Claude API, pgvector retrieval |
-| Frontend | Next.js, React 19, Tailwind CSS, Radix UI, Framer Motion, Apache ECharts, Recharts, TanStack Query and Table |
+| Frontend | Next.js 15, React 19, Tailwind CSS design tokens, Radix UI with shadcn-style components, Apache ECharts, TradingView Lightweight Charts, TanStack Query, Table and Virtual, Zustand, cmdk, Framer Motion, Lucide, Geist and Geist Mono |
+| Frontend quality | Vitest, Playwright (desktop, tablet, mobile), Storybook |
 | Delivery | Docker, GitHub Actions |
 
 ## Getting started
@@ -313,7 +314,16 @@ The backend suite covers:
 - the AI tool loop (with a mocked client)
 - the API
 
-GitHub Actions runs the backend on SQLite and PostgreSQL, the frontend type check, tests and production build, and both Docker image builds.
+The frontend has unit tests (Vitest), browser tests against the static build at desktop, tablet and mobile sizes (Playwright), and a component workbench (Storybook):
+
+```bash
+cd frontend
+npm test                   # unit tests
+npm run test:e2e           # Playwright; needs a static build in frontend/out
+npm run storybook          # component workbench on http://localhost:6006
+```
+
+GitHub Actions runs the backend on SQLite and PostgreSQL, the frontend type check, unit tests, production build and Storybook build, and both Docker image builds. The Pages workflow runs the Playwright suite against each build before publishing it.
 
 ## Deployment
 

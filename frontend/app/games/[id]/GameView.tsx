@@ -1,16 +1,21 @@
 "use client";
 
-import { Activity, BrainCircuit, History, LineChart as LineIcon, Sigma } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { C } from "@/components/charts/EChart";
 import { DistributionChart, EVChips, LineMovementChart, ModelVsVegas, PropCard, ShapBars, StatusPill, WinGauge } from "@/components/game/game";
 import { LadderTable } from "@/components/game/Ladder";
+import { BoxScore } from "@/components/live/BoxScore";
+import { GameFlow } from "@/components/live/GameFlow";
+import { PlayFeed } from "@/components/live/PlayFeed";
+import { ShotChart } from "@/components/live/ShotChart";
+import { livePace, useEspnGame } from "@/lib/espn-game";
 import { pairColors, TeamCrest } from "@/components/identity/identity";
-import { Badge, DemoBadge, Empty, ErrorState, KV, Panel, PanelHeader, ProbBar, ResultBadge, Segmented, Skeleton, SourceStamp, Stat, Tip } from "@/components/ui/primitives";
+import { Badge, DemoBadge, Empty, ErrorState, KV, Panel, PanelHeader, ProbBar, ResultBadge, Segmented, Skeleton, SourceStamp, Stat, TabBar, Tip } from "@/components/ui/primitives";
 import { STATIC, useApi } from "@/lib/api";
 import { american, cn, dateTime, MARKET_LABEL, num, pct, signed, spreadLine, STAT_LABEL } from "@/lib/format";
+import { useSelection } from "@/lib/store";
 import type { Game, Projection, PropProjection } from "@/lib/types";
 
 export default function GameView({ id }: { id: string }) {
@@ -19,6 +24,12 @@ export default function GameView({ id }: { id: string }) {
   const props = useApi<PropProjection[]>(`/api/games/${id}/props`);
   const [mvMarket, setMvMarket] = useState<"spreads" | "totals" | "h2h">("spreads");
   const [stat, setStat] = useState("pts");
+  const [tab, setTab] = useState<"model" | "flow" | "props" | "log">("model");
+  const select = useSelection((st) => st.select);
+  const gd: Game | undefined = q.data?.game;
+  useEffect(() => {
+    if (gd) select({ game: { id: gd.id, label: `${gd.away.abbr} @ ${gd.home.abbr}`, league: gd.league } });
+  }, [gd, select]);
 
   if (q.error) return <ErrorState error={q.error} />;
   if (!q.data) return <Skeleton className="h-[600px]" />;
@@ -28,53 +39,20 @@ export default function GameView({ id }: { id: string }) {
   const ctx = q.data.context ?? {};
 
   return (
-    <div className="space-y-6">
-      {/* Scoreboard */}
-      <Panel className="relative overflow-hidden">
-        <div className="pointer-events-none absolute inset-0 opacity-25" style={{ background: `linear-gradient(100deg, ${g.away.primary}55 0%, transparent 40%, transparent 60%, ${g.home.primary}55 100%)` }} />
-        <div className="grid-bg pointer-events-none absolute inset-0 opacity-40" />
-        <div className="relative flex flex-wrap items-center justify-between gap-2 px-5 pt-4">
-          <div className="flex items-center gap-2">
-            <Badge tone={g.league === "NBA" ? "volt" : "cyan"}>{g.league}</Badge>
-            <span className="text-xs text-mist-400">{g.season} · {dateTime(g.start_time)}</span>
-            {g.neutral && <Badge>Neutral site</Badge>}
-            <DemoBadge show={g.is_demo} />
-          </div>
-          <StatusPill g={g} />
-        </div>
-        <div className="relative grid grid-cols-[1fr_auto_1fr] items-center gap-4 px-5 py-6 md:px-10">
-          <ScoreSide team={g.away} score={g.away_score} proj={p?.projected.away_score} label={g.neutral ? "Team A" : "Away"} />
-          <div className="flex flex-col items-center gap-1">
-            {g.status === "scheduled" ? (
-              <>
-                <div className="label">Projected</div>
-                <div className="font-mono text-2xl font-bold text-mist md:text-3xl">
-                  {num(p?.projected.away_score, 0)}–{num(p?.projected.home_score, 0)}
-                </div>
-              </>
-            ) : (
-              <div className="font-mono text-3xl font-bold text-white md:text-5xl">
-                {g.away_score}<span className="mx-2 text-mist-500">–</span>{g.home_score}
-              </div>
-            )}
-            {g.home_h1 != null && <div className="font-mono text-xs text-mist-400">1H {g.away_h1}–{g.home_h1}</div>}
-          </div>
-          <ScoreSide team={g.home} score={g.home_score} proj={p?.projected.home_score} label={g.neutral ? "Team B" : "Home"} right />
-        </div>
-        {p && (
-          <div className="relative px-5 pb-4 md:px-10">
-            <ProbBar
-              left={live ? 1 - live.live_win_prob_home : p.simulation.win_prob_away}
-              right={live ? live.live_win_prob_home : p.simulation.win_prob_home}
-              leftColor={pairColors(g.away, g.home)[0]}
-              rightColor={pairColors(g.away, g.home)[1]}
-              leftLabel={`${g.away.abbr} ${pct(live ? 1 - live.live_win_prob_home : p.simulation.win_prob_away)}`}
-              rightLabel={`${pct(live ? live.live_win_prob_home : p.simulation.win_prob_home)} ${g.home.abbr}`}
-            />
-          </div>
-        )}
-      </Panel>
-
+    <div className="space-y-3">
+      <GameHeader g={g} p={p} live={live} />
+      <TabBar
+        value={tab}
+        onChange={setTab}
+        tabs={[
+          { value: "model", label: "Model & market" },
+          { value: "flow", label: "Game flow" },
+          { value: "props", label: "Player props", count: props.data?.length || undefined },
+          { value: "log", label: "Forecast log", count: q.data.predictions?.length || undefined },
+        ]}
+      />
+      {tab === "model" && (
+        <div className="space-y-3">
       {!p ? (
         <Panel>
           <Empty title="No active model for this league yet">Train a model in Model Intelligence to generate projections.</Empty>
@@ -83,7 +61,7 @@ export default function GameView({ id }: { id: string }) {
         <>
           {live && (
             <Panel>
-              <PanelHeader eyebrow="Live projection" title="In-game update" icon={<Activity className="h-4 w-4 text-loss" />} right={<span className="text-[11px] text-mist-500">{live.method}</span>} />
+              <PanelHeader eyebrow="Live projection" title="In-game update" right={<span className="text-[11px] text-mist-500">{live.method}</span>} />
               <div className="grid grid-cols-2 gap-4 p-4 md:grid-cols-5">
                 <Stat label="Live win prob (home)" value={pct(live.live_win_prob_home)} sub={`pre-game ${pct(p.simulation.win_prob_home)}`} tone="volt" />
                 <Stat label="Live proj. total" value={num(live.live_projected_total)} sub={`pre-game ${num(p.projected.total)}`} />
@@ -94,7 +72,7 @@ export default function GameView({ id }: { id: string }) {
             </Panel>
           )}
 
-          <div className="grid gap-6 xl:grid-cols-[340px_1fr]">
+          <div className="grid gap-3 xl:grid-cols-[340px_1fr]">
             <Panel>
               <PanelHeader eyebrow="Simulation" title="Win probability" right={<Segmented size="sm" value={sims} onChange={setSims} options={STATIC ? [{ value: "10000", label: "10k" }] : [{ value: "10000", label: "10k" }, { value: "50000", label: "50k" }]} />} />
               <div className="px-2">
@@ -124,7 +102,7 @@ export default function GameView({ id }: { id: string }) {
               </div>
             </Panel>
 
-            <div className="space-y-6">
+            <div className="space-y-3">
               <Panel>
                 <PanelHeader eyebrow="Model vs Vegas" title="Market comparison" right={<SourceStamp source={p.market.books?.join(", ")} at={p.market.captured_at} demo={p.market.is_demo} />} />
                 {p.vs_market.spread || p.vs_market.total ? (
@@ -171,9 +149,9 @@ export default function GameView({ id }: { id: string }) {
             </div>
           </div>
 
-          <div className="grid gap-6 lg:grid-cols-2">
+          <div className="grid gap-3 lg:grid-cols-2">
             <Panel>
-              <PanelHeader eyebrow="Outcome distribution" title={`Final margin (${g.home.abbr} − ${g.away.abbr})`} icon={<Sigma className="h-4 w-4 text-volt" />} />
+              <PanelHeader eyebrow="Outcome distribution" title={`Final margin (${g.home.abbr} − ${g.away.abbr})`} />
               <div className="p-2">
                 <DistributionChart hist={p.simulation.margin_hist ?? []} line={p.simulation.spread ? -p.simulation.spread.line_home : null} label="Margin" />
               </div>
@@ -184,7 +162,7 @@ export default function GameView({ id }: { id: string }) {
               )}
             </Panel>
             <Panel>
-              <PanelHeader eyebrow="Outcome distribution" title="Full-game total" icon={<Sigma className="h-4 w-4 text-cyan" />} />
+              <PanelHeader eyebrow="Outcome distribution" title="Full-game total" />
               <div className="p-2">
                 <DistributionChart hist={p.simulation.total_hist ?? []} line={p.simulation.totals?.line} label="Total" color={C.cyan} />
               </div>
@@ -198,14 +176,14 @@ export default function GameView({ id }: { id: string }) {
 
           {p.simulation.ladder && (
             <Panel>
-              <PanelHeader eyebrow="Alternate lines" title="Price any line from the simulation" icon={<Sigma className="h-4 w-4 text-gold" />} />
+              <PanelHeader eyebrow="Alternate lines" title="Price any line from the simulation" />
               <LadderTable ladder={p.simulation.ladder} g={g} mainSpread={p.market.spread_home} mainTotal={p.market.total} />
             </Panel>
           )}
 
-          <div className="grid gap-6 lg:grid-cols-2">
+          <div className="grid gap-3 lg:grid-cols-2">
             <Panel>
-              <PanelHeader eyebrow="Explainability (SHAP)" title="What drives the spread projection" icon={<BrainCircuit className="h-4 w-4 text-volt" />} />
+              <PanelHeader eyebrow="Explainability (SHAP)" title="What drives the spread projection" />
               <div className="p-4">
                 {p.explain && (
                   <>
@@ -219,7 +197,7 @@ export default function GameView({ id }: { id: string }) {
               </div>
             </Panel>
             <Panel>
-              <PanelHeader eyebrow="Explainability (SHAP)" title="What drives the total projection" icon={<BrainCircuit className="h-4 w-4 text-cyan" />} />
+              <PanelHeader eyebrow="Explainability (SHAP)" title="What drives the total projection" />
               <div className="p-4">
                 {p.explain && (
                   <>
@@ -234,12 +212,12 @@ export default function GameView({ id }: { id: string }) {
             </Panel>
           </div>
 
-          <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+          <div className="grid gap-3 lg:grid-cols-[1fr_360px]">
             <Panel>
               <PanelHeader
                 eyebrow="Odds movement"
                 title="Line history by sportsbook"
-                icon={<LineIcon className="h-4 w-4 text-volt" />}
+               
                 right={<Segmented size="sm" value={mvMarket} onChange={setMvMarket} options={[{ value: "spreads", label: "Spread" }, { value: "totals", label: "Total" }, { value: "h2h", label: "ML" }]} />}
               />
               <div className="p-2">
@@ -293,7 +271,11 @@ export default function GameView({ id }: { id: string }) {
           </div>
         </>
       )}
-
+        </div>
+      )}
+      {tab === "flow" && (
+        <div className="space-y-3">
+          <GameFlowTab g={g} modelPregame={p?.simulation?.win_prob_home} />
       {q.data.box?.home && (
         <Panel>
           <PanelHeader eyebrow="Box score" title="Team totals" />
@@ -331,7 +313,23 @@ export default function GameView({ id }: { id: string }) {
           </div>
         </Panel>
       )}
-
+      {q.data.events?.length > 0 && (
+        <Panel>
+          <PanelHeader eyebrow="Game feed" title="Scoring updates" />
+          <ul className="max-h-64 divide-y divide-line/40 overflow-y-auto">
+            {[...q.data.events].reverse().map((e: any) => (
+              <li key={e.seq} className="flex items-center gap-3 px-4 py-2 text-xs">
+                <span className="w-16 font-mono text-mist-500">{g.league === "NBA" ? `Q${e.period}` : `H${e.period}`} {e.clock}</span>
+                <span className="flex-1 text-mist-300">{e.description}</span>
+              </li>
+            ))}
+          </ul>
+        </Panel>
+      )}
+        </div>
+      )}
+      {tab === "props" && (
+        <div className="space-y-3">
       {(props.data?.length ?? 0) > 0 && (
         <Panel>
           <PanelHeader
@@ -348,23 +346,12 @@ export default function GameView({ id }: { id: string }) {
           </div>
         </Panel>
       )}
-
-      {q.data.events?.length > 0 && (
-        <Panel>
-          <PanelHeader eyebrow="Game feed" title="Scoring updates" />
-          <ul className="max-h-64 divide-y divide-line/40 overflow-y-auto">
-            {[...q.data.events].reverse().map((e: any) => (
-              <li key={e.seq} className="flex items-center gap-3 px-4 py-2 text-xs">
-                <span className="w-16 font-mono text-mist-500">{g.league === "NBA" ? `Q${e.period}` : `H${e.period}`} {e.clock}</span>
-                <span className="flex-1 text-mist-300">{e.description}</span>
-              </li>
-            ))}
-          </ul>
-        </Panel>
+          {!(props.data?.length ?? 0) && <Panel><Empty title="No player projections for this game">Player projections cover NBA games with an active props model.</Empty></Panel>}
+        </div>
       )}
-
+      {tab === "log" && (
       <Panel>
-        <PanelHeader eyebrow="Prediction archive" title="Frozen forecasts for this game" icon={<History className="h-4 w-4 text-mist-400" />} right={<span className="text-[11px] text-mist-500">append-only · never overwritten on retrain</span>} />
+        <PanelHeader eyebrow="Prediction archive" title="Frozen forecasts for this game" right={<span className="text-[11px] text-mist-500">append-only · never overwritten on retrain</span>} />
         <div className="overflow-x-auto">
           <table className="w-full min-w-[820px] text-[12.5px]">
             <thead>
@@ -395,22 +382,96 @@ export default function GameView({ id }: { id: string }) {
           {!q.data.predictions?.length && <Empty title="No archived forecasts yet">Forecasts are frozen automatically once odds are available inside 30 hours of tip-off.</Empty>}
         </div>
       </Panel>
+      )}
     </div>
   );
 }
 
-function ScoreSide({ team, score, proj, label, right }: { team: any; score: number | null; proj?: number; label: string; right?: boolean }) {
-  return (
-    <Link
-      href={`/teams/${team.id}`}
-      className={cn("group flex min-w-0 flex-col items-center gap-2 text-center md:flex-row md:gap-5 md:text-left", right && "md:flex-row-reverse md:text-right")}
-    >
-      <TeamCrest team={team} size={72} className="h-12 w-12 md:h-[72px] md:w-[72px]" />
+function GameHeader({ g, p, live }: { g: Game; p: Projection | null; live: any }) {
+  const [ca, ch] = pairColors(g.away, g.home);
+  const wpHome = live ? live.live_win_prob_home : p?.simulation.win_prob_home;
+  const scored = g.status !== "scheduled";
+  const side = (t: Game["home"], score: number | null, proj: number | undefined, label: string, right?: boolean) => (
+    <Link href={`/teams/${t.id}`} className={cn("flex min-w-0 items-center gap-3", right && "flex-row-reverse text-right")}>
+      <TeamCrest team={t} size={44} />
       <div className="min-w-0">
-        <div className="label">{label}</div>
-        <div className="font-display text-base font-semibold leading-tight text-mist group-hover:text-volt-300 md:truncate md:text-2xl">{team.location}</div>
-        <div className="truncate text-xs text-mist-400 md:text-sm">{team.nickname}</div>
+        <div className="text-2xs text-subtle">{label}</div>
+        <div className="truncate text-base font-semibold text-fg hover:underline">{t.name}</div>
+      </div>
+      <div className={cn("num text-[34px] font-medium leading-none", right ? "mr-auto" : "ml-auto", scored ? "text-fg" : "text-muted")} title={scored ? undefined : "model projection"}>
+        {scored ? (score ?? "–") : num(proj, 0)}
       </div>
     </Link>
+  );
+  return (
+    <Panel>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-hair px-3 py-1.5 text-xs">
+        <span className="text-muted">
+          {g.league === "CBB" ? "NCAA" : "NBA"} · {g.season} · {dateTime(g.start_time)}
+          {g.neutral ? " · neutral site" : ""}
+        </span>
+        <span className="flex items-center gap-2">
+          <DemoBadge show={g.is_demo} />
+          <StatusPill g={g} />
+        </span>
+      </div>
+      <div className="grid items-center gap-4 px-4 py-3 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
+        {side(g.away, g.away_score, p?.projected.away_score, g.neutral ? "Team A" : "Away")}
+        <div className="num flex flex-col items-center text-center text-2xs text-subtle">
+          {scored ? <span>{g.status === "final" ? "Final" : "Live"}</span> : <span>Projected</span>}
+          {g.home_h1 != null && (
+            <span>
+              1H {g.away_h1}–{g.home_h1}
+            </span>
+          )}
+          {p?.market?.spread_home != null && (
+            <span className="text-muted">
+              {g.home.abbr} {spreadLine(p.market.spread_home)} · O/U {num(p.market.total, 1)}
+            </span>
+          )}
+        </div>
+        {side(g.home, g.home_score, p?.projected.home_score, g.neutral ? "Team B" : "Home", true)}
+      </div>
+      {wpHome != null && (
+        <div className="px-4 pb-3">
+          <ProbBar left={1 - wpHome} right={wpHome} leftColor={ca} rightColor={ch} leftLabel={`${g.away.abbr} ${pct(1 - wpHome)}`} rightLabel={`${pct(wpHome)} ${g.home.abbr}`} />
+          <div className="mt-1 text-center text-2xs text-subtle">{live ? "Live model win probability" : "Model win probability, frozen before tip-off"}</div>
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+function GameFlowTab({ g, modelPregame }: { g: Game; modelPregame?: number }) {
+  const eg = useEspnGame(g.league, g.espn_id, g.status === "live");
+  if (!g.espn_id) return <Panel><Empty title="No ESPN event linked to this game" /></Panel>;
+  if (eg.isLoading) return <Skeleton className="h-[360px]" />;
+  if (eg.isError || !eg.data) return <ErrorState error={new Error("ESPN play-by-play is unavailable right now.")} />;
+  const d = eg.data;
+  if (!d.plays.length) return <Panel><Empty title={g.status === "scheduled" ? "Game has not started" : "No play-by-play published"}>The win probability curve, shot chart and play-by-play appear from tip-off.</Empty></Panel>;
+  const pace = livePace(d);
+  return (
+    <>
+      <Panel>
+        <PanelHeader title="Win probability and margin" eyebrow="ESPN, per play" right={pace ? <span className="num text-2xs text-subtle">pace {num(pace.pace, 1)} · {num(pace.possessions, 0)} poss.</span> : undefined} />
+        <GameFlow g={d} modelPregame={modelPregame} height={320} />
+      </Panel>
+      <div className="grid gap-3 lg:grid-cols-2">
+        <Panel>
+          <PanelHeader title="Shot chart" eyebrow="field goals" />
+          <ShotChart plays={d.plays} home={d.home} away={d.away} league={g.league} />
+        </Panel>
+        <Panel>
+          <PanelHeader title="Play-by-play" />
+          <PlayFeed g={d} height={392} />
+        </Panel>
+      </div>
+      {Object.keys(d.players).length > 0 && (
+        <Panel>
+          <PanelHeader title="Box score" eyebrow="ESPN" />
+          <BoxScore g={d} />
+        </Panel>
+      )}
+    </>
   );
 }

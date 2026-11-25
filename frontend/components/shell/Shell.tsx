@@ -1,191 +1,207 @@
 "use client";
 
-import { AnimatePresence, motion } from "framer-motion";
+import * as Dialog from "@radix-ui/react-dialog";
 import {
-  Activity,
-  BarChart3,
-  Bot,
-  BrainCircuit,
-  ClipboardList,
+  CandlestickChart,
+  Cpu,
   Database,
-  Gauge,
-  GraduationCap,
-  LayoutDashboard,
-  LineChart,
+  LayoutGrid,
+  ListChecks,
   Menu,
+  MessageSquareText,
+  Microscope,
+  Moon,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Radio,
+  Search,
   Settings,
-  Sigma,
-  Trophy,
-  Users,
+  Sun,
   X,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
 
-import { AIPanel } from "@/components/shell/AIPanel";
+import { AIDock } from "@/components/shell/AIPanel";
+import { CommandPalette, useCommandPalette } from "@/components/shell/CommandPalette";
+import { DataStatus } from "@/components/shell/DataStatus";
 import { Ticker } from "@/components/shell/Ticker";
-import { REPO_URL, STATIC } from "@/lib/api";
+import { Kbd, Segmented, Tip } from "@/components/ui/primitives";
 import { cn } from "@/lib/format";
-import { useNow, useStatus } from "@/lib/hooks";
+import { resolvedTheme, usePrefs, type LeagueFilter } from "@/lib/store";
 
-export const NAV = [
-  { n: "01", href: "/", label: "Command Center", icon: LayoutDashboard },
-  { n: "02", href: "/nba", label: "NBA Game Center", icon: Trophy },
-  { n: "03", href: "/cbb", label: "College Basketball", icon: GraduationCap },
-  { n: "04", href: "/live", label: "Live Analytics", icon: Activity },
-  { n: "05", href: "/totals", label: "Game Totals Lab", icon: Sigma },
-  { n: "06", href: "/spreads", label: "Spreads & Odds", icon: LineChart },
-  { n: "07", href: "/props", label: "Player Props Lab", icon: Users },
-  { n: "08", href: "/trends", label: "Trends Lab", icon: BarChart3 },
-  { n: "09", href: "/picks", label: "Picks Tracker", icon: ClipboardList },
-  { n: "10", href: "/model", label: "Model Intelligence", icon: BrainCircuit },
-  { n: "11", href: "/data", label: "Data Management", icon: Database },
-  { n: "12", href: "/ai", label: "COURTSIDE AI", icon: Bot },
-  { n: "13", href: "/settings", label: "Settings", icon: Settings },
+export const WORKSPACES = [
+  { href: "/", label: "Command Center", short: "Command", icon: LayoutGrid, match: (p: string) => p === "/" },
+  { href: "/live", label: "Live Games", short: "Live", icon: Radio, match: (p: string) => p.startsWith("/live") || p.startsWith("/games") },
+  { href: "/markets", label: "Market Intelligence", short: "Markets", icon: CandlestickChart, match: (p: string) => p.startsWith("/markets") },
+  { href: "/research", label: "Research Lab", short: "Research", icon: Microscope, match: (p: string) => p.startsWith("/research") || p.startsWith("/teams") || p.startsWith("/players") },
+  { href: "/picks", label: "Picks & Performance", short: "Picks", icon: ListChecks, match: (p: string) => p.startsWith("/picks") },
+  { href: "/model", label: "Model Intelligence", short: "Model", icon: Cpu, match: (p: string) => p.startsWith("/model") },
+];
+const SECONDARY = [
+  { href: "/research?tab=data", label: "Data & imports", icon: Database, match: (p: string, t: string | null) => p.startsWith("/research") && t === "data" },
+  { href: "/settings", label: "Settings", icon: Settings, match: (p: string) => p.startsWith("/settings") },
 ];
 
-function Logo() {
+/** Brand mark: a half-court arc over a baseline, drawn with the accent. */
+export function Mark({ className }: { className?: string }) {
   return (
-    <Link href="/" className="flex items-center gap-2.5 px-1">
-      <svg viewBox="0 0 32 32" className="h-8 w-8" aria-hidden>
-        <defs>
-          <linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stopColor="#5A97FF" />
-            <stop offset="1" stopColor="#22D3EE" />
-          </linearGradient>
-        </defs>
-        <rect x="1" y="1" width="30" height="30" rx="9" fill="#0A1222" stroke="url(#lg)" strokeWidth="1.5" />
-        <circle cx="16" cy="16" r="8.5" fill="none" stroke="url(#lg)" strokeWidth="1.6" />
-        <path d="M7.5 16 H24.5 M16 7.5 V24.5" stroke="url(#lg)" strokeWidth="1.2" opacity="0.8" />
-        <path d="M10 10.5 Q16 16 10 21.5 M22 10.5 Q16 16 22 21.5" stroke="url(#lg)" strokeWidth="1.1" fill="none" opacity="0.8" />
-      </svg>
-      <div className="leading-none">
-        <div className="font-display text-[15px] font-bold tracking-tight text-mist">
-          COURTSIDE <span className="bg-gradient-to-r from-volt-400 to-cyan bg-clip-text text-transparent">IQ</span>
-        </div>
-        <div className="mt-1 text-[9.5px] font-semibold uppercase tracking-[0.2em] text-mist-500">Basketball Intelligence</div>
-      </div>
+    <svg viewBox="0 0 24 24" className={className} aria-hidden>
+      <rect x="0.5" y="0.5" width="23" height="23" rx="3" className="fill-fg" />
+      <path d="M4 17.5h16" className="stroke-canvas" strokeWidth="1.6" />
+      <path d="M6.5 17.5a5.5 5.5 0 0 1 11 0" fill="none" className="stroke-accent" strokeWidth="2" />
+      <circle cx="12" cy="17.5" r="1.4" className="fill-accent" />
+    </svg>
+  );
+}
+
+function Brand({ collapsed }: { collapsed?: boolean }) {
+  return (
+    <Link href="/" className="flex h-11 items-center gap-2 px-3" aria-label="COURTSIDE IQ home">
+      <Mark className="h-5 w-5 shrink-0" />
+      {!collapsed && (
+        <span className="whitespace-nowrap text-[13px] font-semibold tracking-[0.04em] text-fg">
+          COURTSIDE <span className="text-accent">IQ</span>
+        </span>
+      )}
     </Link>
   );
 }
 
-function NavList({ onNavigate }: { onNavigate?: () => void }) {
+function NavItems({ collapsed, onNavigate }: { collapsed?: boolean; onNavigate?: () => void }) {
   const path = usePathname();
+  const tab = useSearchParams().get("tab");
+  const item = (it: { href: string; label: string; icon: any; active: boolean }) => {
+    const Icon = it.icon;
+    const link = (
+      <Link
+        key={it.href}
+        href={it.href}
+        onClick={onNavigate}
+        aria-current={it.active ? "page" : undefined}
+        className={cn(
+          "relative flex h-8 items-center gap-2.5 rounded px-2.5 text-sm transition-colors",
+          it.active ? "bg-raised text-fg" : "text-muted hover:bg-raised/60 hover:text-fg",
+          collapsed && "justify-center px-0",
+        )}
+      >
+        {it.active && <span aria-hidden className="absolute inset-y-1.5 left-0 w-[2px] bg-accent" />}
+        <Icon className="h-4 w-4 shrink-0" strokeWidth={1.75} />
+        {!collapsed && <span className="truncate">{it.label}</span>}
+      </Link>
+    );
+    return collapsed ? (
+      <Tip key={it.href} content={it.label} side="right">
+        {link}
+      </Tip>
+    ) : (
+      link
+    );
+  };
   return (
-    <nav className="flex flex-col gap-0.5">
-      {NAV.map((item) => {
-        const active = item.href === "/" ? path === "/" : path.startsWith(item.href);
-        const Icon = item.icon;
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            onClick={onNavigate}
-            className={cn(
-              "group relative flex items-center gap-3 rounded-lg px-2.5 py-2 text-[13px] transition-all",
-              active ? "bg-volt/10 text-mist" : "text-mist-400 hover:bg-ink-800 hover:text-mist",
-            )}
-          >
-            {active && <motion.span layoutId="nav-active" className="absolute inset-y-1.5 left-0 w-[3px] rounded-full bg-gradient-to-b from-volt to-cyan" />}
-            <span className={cn("w-5 font-mono text-[10px]", active ? "text-volt-300" : "text-mist-500")}>{item.n}</span>
-            <Icon className={cn("h-4 w-4", active ? "text-volt-300" : "text-mist-500 group-hover:text-mist-300")} />
-            <span className="truncate font-medium">{item.label}</span>
-          </Link>
-        );
-      })}
+    <nav aria-label="Workspaces" className="flex flex-1 flex-col gap-0.5 px-2">
+      {WORKSPACES.map((w) => item({ ...w, active: w.match(path) && !(path.startsWith("/research") && tab === "data") }))}
+      <div className="my-2 border-t border-hair" />
+      {SECONDARY.map((w) => item({ ...w, active: w.match(path, tab) }))}
     </nav>
   );
 }
 
-function StatusFooter() {
-  const { data } = useStatus();
-  if (!data) return <div className="skeleton h-16" />;
-  const providers = Object.entries<any>(data.providers ?? {});
+function ThemeToggle() {
+  const { theme, setTheme } = usePrefs();
+  const [dark, setDark] = useState(true);
+  useEffect(() => setDark(resolvedTheme(theme) === "dark"), [theme]);
   return (
-    <div className="rounded-xl border border-line bg-ink-900/70 p-3">
-      <div className="flex items-center justify-between">
-        <span className="label">Data mode</span>
-        <span className={cn("rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider", data.demo ? "bg-flare/10 text-flare" : "bg-gain/10 text-gain")}>{data.demo ? "Demo" : "Live"}</span>
-      </div>
-      <div className="mt-2 space-y-1">
-        {providers.map(([k, v]) => (
-          <div key={k} className="flex items-center justify-between text-[11px]">
-            <span className="text-mist-400">{k.replace(/_/g, " ")}</span>
-            <span className={cn("h-1.5 w-1.5 rounded-full", !v.configured ? "bg-mist-500" : v.ok === false ? "bg-loss" : "bg-gain")} title={v.configured ? v.message ?? "configured" : "not configured"} />
-          </div>
-        ))}
-        <div className="flex items-center justify-between text-[11px]">
-          <span className="text-mist-400">claude ai</span>
-          <span className={cn("h-1.5 w-1.5 rounded-full", data.ai_enabled ? "bg-gain" : "bg-mist-500")} />
-        </div>
-      </div>
-    </div>
+    <Tip content={dark ? "Light theme" : "Dark theme"}>
+      <button aria-label="Toggle theme" onClick={() => setTheme(dark ? "light" : "dark")} className="flex h-7 w-7 items-center justify-center rounded text-muted hover:bg-raised hover:text-fg">
+        {dark ? <Sun className="h-4 w-4" strokeWidth={1.75} /> : <Moon className="h-4 w-4" strokeWidth={1.75} />}
+      </button>
+    </Tip>
   );
 }
 
-function TopBar({ onMenu, onAI }: { onMenu: () => void; onAI: () => void }) {
-  const now = useNow(1000);
-  const { data } = useStatus();
+function TopBar({ onMenu }: { onMenu: () => void }) {
   const path = usePathname();
-  const current = NAV.find((n) => (n.href === "/" ? path === "/" : path.startsWith(n.href)));
+  const { league, setLeague, aiOpen, setAiOpen, navCollapsed, toggleNav } = usePrefs();
+  const palette = useCommandPalette();
+  const ws = WORKSPACES.find((w) => w.match(path));
   return (
-    <div className="flex h-12 items-center justify-between gap-3 border-b border-line/60 px-4 lg:px-6">
-      <div className="flex items-center gap-3">
-        <button className="rounded-md p-1.5 text-mist-300 hover:bg-ink-800 lg:hidden" onClick={onMenu} aria-label="Open navigation">
-          <Menu className="h-5 w-5" />
-        </button>
-        <div className="flex items-center gap-2 text-xs text-mist-400">
-          <span className="font-mono text-volt-300">{current?.n}</span>
-          <span className="text-mist-500">/</span>
-          <span className="font-medium text-mist-300">{current?.label ?? "Detail"}</span>
-        </div>
+    <div className="flex h-11 shrink-0 items-center gap-2 border-b border-hair bg-surface px-2 sm:px-3">
+      <button className="flex h-7 w-7 items-center justify-center rounded text-muted hover:bg-raised lg:hidden" onClick={onMenu} aria-label="Open navigation">
+        <Menu className="h-4 w-4" />
+      </button>
+      <button className="hidden h-7 w-7 items-center justify-center rounded text-muted hover:bg-raised hover:text-fg lg:flex" onClick={toggleNav} aria-label={navCollapsed ? "Expand sidebar" : "Collapse sidebar"}>
+        {navCollapsed ? <PanelLeftOpen className="h-4 w-4" strokeWidth={1.75} /> : <PanelLeftClose className="h-4 w-4" strokeWidth={1.75} />}
+      </button>
+      <div className="hidden min-w-0 items-center gap-1.5 text-sm md:flex">
+        <span className="truncate font-medium text-fg">{ws?.label ?? "Detail"}</span>
       </div>
-      <div className="flex items-center gap-3">
-        {STATIC ? (
-          data?.demo ? (
-            <a
-              href={REPO_URL}
-              className="hidden rounded-md border border-flare/30 bg-flare/10 px-2 py-1 text-[10.5px] font-semibold text-flare hover:bg-flare/20 md:inline"
-              title="Read-only preview built from the repository's demo dataset. Run the application for live updates, the AI assistant, imports and picks."
-            >
-              STATIC PREVIEW · demo data as of {data?.server_time ? new Date(data.server_time).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" }) : "…"} · view source
-            </a>
-          ) : (
-            <a
-              href={REPO_URL}
-              className="hidden rounded-md border border-gain/30 bg-gain/10 px-2 py-1 text-[10.5px] font-semibold text-gain hover:bg-gain/20 md:inline"
-              title="Real NBA and college games, DraftKings lines and box scores from ESPN. Forecasts and backtests are rebuilt on a schedule; scores of games in progress refresh in your browser."
-            >
-              LIVE DATA · ESPN · forecasts built{" "}
-              {data?.server_time ? new Date(data.server_time).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "…"} · live scores in-browser
-            </a>
-          )
-        ) : (
-          data?.demo && (
-            <span className="hidden rounded-md border border-flare/30 bg-flare/10 px-2 py-1 text-[10.5px] font-semibold text-flare md:inline">
-              DEMO MODE · synthetic data, no live provider connected
-            </span>
-          )
-        )}
-        <span className="hidden items-center gap-1.5 font-mono text-[11px] text-mist-400 sm:flex">
-          <Gauge className="h-3.5 w-3.5" />
-          {now ? now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "--:--:--"}
-        </span>
+      <button
+        onClick={() => palette.setOpen(true)}
+        className="ml-auto flex h-7 min-w-0 flex-1 items-center gap-2 rounded border border-hair bg-canvas px-2 text-sm text-subtle hover:border-edge sm:max-w-[340px] md:ml-6"
+        aria-label="Search games, teams, players and commands"
+      >
+        <Search className="h-3.5 w-3.5 shrink-0" />
+        <span className="truncate">Search games, teams, players…</span>
+        <Kbd className="ml-auto hidden sm:inline">⌘K</Kbd>
+      </button>
+      <div className="ml-auto hidden items-center gap-2 sm:flex">
+        <Segmented<LeagueFilter>
+          size="sm"
+          label="League"
+          value={league}
+          onChange={setLeague}
+          options={[
+            { value: "ALL", label: "All" },
+            { value: "NBA", label: "NBA" },
+            { value: "CBB", label: "NCAA" },
+          ]}
+        />
+        <DataStatus />
+      </div>
+      <ThemeToggle />
+      <Tip content="COURTSIDE AI">
         <button
-          onClick={onAI}
-          className="flex items-center gap-1.5 rounded-lg border border-volt/30 bg-volt/10 px-2.5 py-1.5 text-xs font-semibold text-volt-300 transition-all hover:bg-volt/20 hover:shadow-glow"
+          aria-label={aiOpen ? "Close COURTSIDE AI" : "Open COURTSIDE AI"}
+          aria-pressed={aiOpen}
+          onClick={() => setAiOpen(!aiOpen)}
+          className={cn("flex h-7 items-center gap-1.5 rounded px-2 text-sm", aiOpen ? "bg-raised text-fg" : "text-muted hover:bg-raised hover:text-fg")}
         >
-          <Bot className="h-3.5 w-3.5" /> Ask COURTSIDE AI
+          <MessageSquareText className="h-4 w-4" strokeWidth={1.75} />
+          <span className="hidden xl:inline">AI</span>
         </button>
-      </div>
+      </Tip>
+      <CommandPalette {...palette} />
     </div>
   );
 }
 
-export function Shell({ children }: { children: React.ReactNode }) {
+function MobileFilters() {
+  const { league, setLeague } = usePrefs();
+  return (
+    <div className="space-y-2 border-t border-hair p-3 sm:hidden">
+      <Segmented<LeagueFilter>
+        size="sm"
+        label="League"
+        value={league}
+        onChange={setLeague}
+        options={[
+          { value: "ALL", label: "All leagues" },
+          { value: "NBA", label: "NBA" },
+          { value: "CBB", label: "NCAA" },
+        ]}
+      />
+      <DataStatus wide />
+    </div>
+  );
+}
+
+function ShellFrame({ children }: { children: React.ReactNode }) {
   const [menu, setMenu] = useState(false);
-  const [ai, setAI] = useState(false);
+  const collapsed = usePrefs((s) => s.navCollapsed);
+  const path = usePathname();
+  useEffect(() => setMenu(false), [path]);
   useEffect(() => {
     try {
       document.documentElement.dataset.density = localStorage.getItem("ciq-density") ?? "comfortable";
@@ -193,49 +209,54 @@ export function Shell({ children }: { children: React.ReactNode }) {
     } catch {}
   }, []);
   return (
-    <div className="flex min-h-screen">
-      <aside className="sticky top-0 hidden h-screen w-[248px] shrink-0 flex-col gap-5 border-r border-line bg-ink-950/80 px-3 py-4 backdrop-blur lg:flex">
-        <Logo />
-        <div className="no-scrollbar -mx-1 flex-1 overflow-y-auto px-1">
-          <NavList />
+    <div className="flex h-[100dvh] overflow-hidden bg-canvas">
+      <aside className={cn("hidden shrink-0 flex-col border-r border-hair bg-surface transition-[width] duration-150 lg:flex", collapsed ? "w-[52px]" : "w-[208px]")}>
+        <Brand collapsed={collapsed} />
+        <div className="flex flex-1 flex-col overflow-y-auto py-2">
+          <Suspense fallback={null}>
+            <NavItems collapsed={collapsed} />
+          </Suspense>
         </div>
-        <StatusFooter />
-      </aside>
-      <AnimatePresence>
-        {menu && (
-          <motion.div className="fixed inset-0 z-[60] lg:hidden" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            <div className="absolute inset-0 bg-black/60" onClick={() => setMenu(false)} />
-            <motion.aside
-              initial={{ x: -280 }}
-              animate={{ x: 0 }}
-              exit={{ x: -280 }}
-              transition={{ type: "spring", stiffness: 380, damping: 36 }}
-              className="absolute inset-y-0 left-0 flex w-[270px] flex-col gap-5 border-r border-line bg-ink-950 px-3 py-4"
-            >
-              <div className="flex items-center justify-between">
-                <Logo />
-                <button onClick={() => setMenu(false)} className="rounded p-1 text-mist-400" aria-label="Close navigation">
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-              <div className="flex-1 overflow-y-auto">
-                <NavList onNavigate={() => setMenu(false)} />
-              </div>
-              <StatusFooter />
-            </motion.aside>
-          </motion.div>
+        {!collapsed && (
+          <div className="border-t border-hair px-3 py-2 text-2xs leading-4 text-subtle">
+            Research software. Forecasts are probabilities, not advice.
+          </div>
         )}
-      </AnimatePresence>
+      </aside>
+      <Dialog.Root open={menu} onOpenChange={setMenu}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-[60] bg-black/50 lg:hidden" />
+          <Dialog.Content className="fixed inset-y-0 left-0 z-[61] flex w-[260px] flex-col border-r border-hair bg-surface lg:hidden" aria-describedby={undefined}>
+            <Dialog.Title className="sr-only">Navigation</Dialog.Title>
+            <div className="flex items-center justify-between pr-2">
+              <Brand />
+              <Dialog.Close className="p-1.5 text-muted" aria-label="Close navigation">
+                <X className="h-4 w-4" />
+              </Dialog.Close>
+            </div>
+            <div className="flex flex-1 flex-col py-2">
+              <Suspense fallback={null}>
+                <NavItems onNavigate={() => setMenu(false)} />
+              </Suspense>
+            </div>
+            <MobileFilters />
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
       <div className="flex min-w-0 flex-1 flex-col">
+        <TopBar onMenu={() => setMenu(true)} />
         <Ticker />
-        <TopBar onMenu={() => setMenu(true)} onAI={() => setAI(true)} />
-        <main className="mx-auto w-full max-w-[1600px] flex-1 px-4 py-6 lg:px-6">{children}</main>
-        <footer className="border-t border-line/60 px-6 py-4 text-[11px] text-mist-500">
-          COURTSIDE IQ is research software. Forecasts are probabilistic estimates, not guarantees, and nothing here is betting or financial advice. Team names and colours identify
-          franchises and schools; no trademarked logos are bundled; licensed assets can be registered in Settings.
-        </footer>
+        <div className="flex min-h-0 flex-1">
+          <main id="main" className="min-w-0 flex-1 overflow-y-auto">
+            <div className="mx-auto w-full max-w-[1680px] px-3 py-3 sm:px-4 lg:px-5">{children}</div>
+          </main>
+          <AIDock />
+        </div>
       </div>
-      <AIPanel open={ai} onClose={() => setAI(false)} />
     </div>
   );
+}
+
+export function Shell({ children }: { children: React.ReactNode }) {
+  return <ShellFrame>{children}</ShellFrame>;
 }

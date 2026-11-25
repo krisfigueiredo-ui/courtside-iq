@@ -1,7 +1,5 @@
-import { LeagueCenter } from "@/components/game/LeagueCenter";
-
-export const metadata = { title: "NBA Game Center" };
+import { Redirect } from "@/components/nav/Redirect";
 
 export default function Page() {
-  return <LeagueCenter league="NBA" />;
+  return <Redirect to="/live?tab=nba" label="Live Games, NBA" />;
 }

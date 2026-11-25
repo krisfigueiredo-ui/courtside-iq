@@ -1,7 +1,5 @@
-import { LeagueCenter } from "@/components/game/LeagueCenter";
-
-export const metadata = { title: "College Basketball Center" };
+import { Redirect } from "@/components/nav/Redirect";
 
 export default function Page() {
-  return <LeagueCenter league="CBB" />;
+  return <Redirect to="/live?tab=cbb" label="Live Games, NCAA" />;
 }

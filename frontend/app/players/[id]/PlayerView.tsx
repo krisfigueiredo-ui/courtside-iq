@@ -2,13 +2,15 @@
 
 import { HeartPulse } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { C, EChart, baseAxis, tooltip } from "@/components/charts/EChart";
 import { StatusPill } from "@/components/game/game";
 import { PlayerPortrait, RosterBadge, TeamCrest } from "@/components/identity/identity";
-import { Badge, DemoBadge, Empty, ErrorState, KV, Panel, PanelHeader, ProbBar, ResultBadge, Segmented, Skeleton, SourceStamp, Stat } from "@/components/ui/primitives";
+import { Badge, DemoBadge, Empty, ErrorState, KV, Panel, PanelHeader, ProbBar, ResultBadge, Segmented, Skeleton, SourceStamp, Stat, StatStrip } from "@/components/ui/primitives";
 import { useApi } from "@/lib/api";
+import { useSelection } from "@/lib/store";
+import { StreakCell } from "@/components/views/StreaksView";
 import { american, num, pct, signed, STAT_LABEL } from "@/lib/format";
 import type { PredictionRow } from "@/lib/types";
 
@@ -16,6 +18,13 @@ export default function PlayerView({ id }: { id: string }) {
   const q = useApi<any>(`/api/players/${id}`);
   const preds = useApi<PredictionRow[]>(`/api/predictions?player_id=${id}&limit=300&settled=true`);
   const [stat, setStat] = useState("pts");
+  const st = useApi<{ rows: any[] }>("/api/performance/streaks?by=player&league=NBA&market=all");
+  const form = st.data?.rows.find((r) => r.player_id === Number(id))?.form;
+  const select = useSelection((x) => x.select);
+  const player = q.data?.player;
+  useEffect(() => {
+    if (player) select({ player: { id: player.id, label: player.name } });
+  }, [player, select]);
   if (q.error) return <ErrorState error={q.error} />;
   if (!q.data) return <Skeleton className="h-[600px]" />;
   const p = q.data.player;
@@ -26,38 +35,47 @@ export default function PlayerView({ id }: { id: string }) {
   const opp = g ? (g.home.id === p.team?.id ? g.away : g.home) : null;
   const actualVsPred = (preds.data ?? []).filter((r) => r.market === `prop_${stat}` && r.actual != null).reverse();
   return (
-    <div className="space-y-6">
-      <Panel className="relative overflow-hidden">
-        <div className="pointer-events-none absolute inset-0 opacity-30" style={{ background: `linear-gradient(110deg, ${p.team?.primary ?? "#2F7BFF"}aa 0%, transparent 55%)` }} />
-        <div className="grid-bg pointer-events-none absolute inset-0 opacity-40" />
-        <div className="relative flex flex-col gap-5 p-5 md:flex-row md:items-end">
-          <PlayerPortrait player={p} size={150} />
+    <div className="space-y-3">
+      <Panel>
+        <div className="flex flex-col gap-3 p-3 sm:flex-row sm:items-end">
+          <PlayerPortrait player={p} size={96} />
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              {p.team && <TeamCrest team={p.team} size={22} />}
-              <Link href={p.team ? `/teams/${p.team.id}` : "#"} className="text-sm text-mist-300 hover:text-volt-300">
-                {p.team?.name}
-              </Link>
-              <DemoBadge show={tr.is_demo} />
-            </div>
-            <h1 className="mt-1 font-display text-3xl font-semibold tracking-tight text-mist md:text-4xl">{p.name}</h1>
-            <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-mist-400">
-              <span>{p.position ?? "—"}</span>
-              {p.jersey && <span className="font-mono">#{p.jersey}</span>}
+            <h1 className="text-[19px] font-semibold tracking-[-0.01em] text-fg">{p.name}</h1>
+            <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
+              {p.team && (
+                <Link href={`/teams/${p.team.id}`} className="flex items-center gap-1.5 hover:text-fg">
+                  <TeamCrest team={p.team} size={16} /> {p.team.name}
+                </Link>
+              )}
+              <span>{p.position ?? "–"}</span>
+              {p.jersey && <span className="num">#{p.jersey}</span>}
               <RosterBadge player={p} />
+              <DemoBadge show={tr.is_demo} />
               {q.data.injury && (
-                <Badge tone="loss">
-                  <HeartPulse className="h-3 w-3" /> {q.data.injury.status}
-                </Badge>
+                <span className="text-neg" title={q.data.injury.description ?? ""}>
+                  {q.data.injury.status}: {q.data.injury.description ?? ""}
+                </span>
               )}
             </div>
           </div>
-          <div className="grid grid-cols-4 gap-4 md:w-[460px]">
-            {["pts", "reb", "ast", "minutes"].map((k) => (
-              <Stat key={k} label={k === "minutes" ? "MIN" : k.toUpperCase()} value={num(tr.windows?.season?.[k])} sub={`L10 ${num(tr.windows?.["10"]?.[k])}`} />
-            ))}
-          </div>
         </div>
+        <StatStrip>
+          {["pts", "reb", "ast", "minutes"].map((k) => (
+            <Stat key={k} label={`${k === "minutes" ? "MIN" : k.toUpperCase()} season`} value={num(tr.windows?.season?.[k])} sub={`L10 ${num(tr.windows?.["10"]?.[k])}`} />
+          ))}
+          {form &&
+            (["pts", "reb", "ast", "pra"] as const).map((k) =>
+              form.stats?.[k] ? (
+                <Stat
+                  key={`s${k}`}
+                  label={`${k.toUpperCase()} vs own avg`}
+                  hint="Consecutive games above (▲) or below (▼) the player's season average; longest runs this season."
+                  value={<StreakCell s={form.stats[k].current ? `${form.stats[k].current[0] === "A" ? "▲" : "▼"}${form.stats[k].current.slice(1)}` : null} />}
+                  sub={`longest ▲${form.stats[k].longest_win} ▼${form.stats[k].longest_loss}`}
+                />
+              ) : null,
+            )}
+        </StatStrip>
       </Panel>
 
       {games.length === 0 ? (
@@ -66,7 +84,7 @@ export default function PlayerView({ id }: { id: string }) {
         </Panel>
       ) : (
         <>
-          <div className="grid gap-6 xl:grid-cols-[1fr_400px]">
+          <div className="grid gap-3 xl:grid-cols-[1fr_400px]">
             <Panel>
               <PanelHeader
                 eyebrow="Rolling performance"
@@ -141,7 +159,7 @@ export default function PlayerView({ id }: { id: string }) {
             </Panel>
           </div>
 
-          <div className="grid gap-6 lg:grid-cols-2">
+          <div className="grid gap-3 lg:grid-cols-2">
             <Panel>
               <PanelHeader eyebrow="Accountability" title={`Predicted vs actual: ${STAT_LABEL[stat] ?? stat}`} />
               <div className="p-2">

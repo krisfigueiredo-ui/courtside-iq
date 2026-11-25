@@ -3,48 +3,52 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createColumnHelper } from "@tanstack/react-table";
 import { Download, Plus, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 
 import { C, EChart, baseAxis, tooltip } from "@/components/charts/EChart";
 import { TeamCrest } from "@/components/identity/identity";
 import { DataTable } from "@/components/ui/DataTable";
-import { Badge, Button, Empty, PageHeader, Panel, PanelHeader, ResultBadge, Segmented, Skeleton, Stat, Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/primitives";
+import { Badge, Button, Empty, Panel, PanelHeader, ResultBadge, Segmented, Skeleton, Stat, StatStrip, TabBar } from "@/components/ui/primitives";
 import { STATIC, STATIC_MESSAGE, api, exportUrl, useApi } from "@/lib/api";
+import { usePrefs } from "@/lib/store";
+import { useTab } from "@/lib/useTab";
+import { StreaksView } from "@/components/views/StreaksView";
 import { american, cn, dateShort, MARKET_LABEL, num, pct, signed, spreadLine } from "@/lib/format";
 import type { Game, PerfBlock, PredictionRow } from "@/lib/types";
 
-export default function PicksTracker() {
-  const [league, setLeague] = useState<"ALL" | "NBA" | "CBB">("ALL");
+const TABS = ["performance", "breakdown", "archive", "journal", "diagnostics"] as const;
+
+function PicksWorkspace() {
+  const league = usePrefs((st) => st.league);
   const lq = league === "ALL" ? "" : `league=${league}`;
+  const [tab, setTab] = useTab<(typeof TABS)[number]>("performance", TABS);
   return (
-    <div className="space-y-6">
-      <PageHeader
-        index="09"
-        title="Picks Tracker"
-        subtitle="Every model forecast is frozen with its timestamp, model version, line and price, then graded against final results. Alongside it: your own picks journal. Nothing here places wagers."
-        right={<Segmented value={league} onChange={setLeague} options={[{ value: "ALL", label: "All" }, { value: "NBA", label: "NBA" }, { value: "CBB", label: "CBB" }]} />}
+    <>
+      <TabBar
+        value={tab}
+        onChange={setTab}
+        tabs={[
+          { value: "performance", label: "Performance" },
+          { value: "breakdown", label: "Streaks & splits" },
+          { value: "archive", label: "Forecast archive" },
+          { value: "journal", label: "Picks journal" },
+          { value: "diagnostics", label: "Error analysis" },
+        ]}
       />
-      <Tabs defaultValue="performance">
-        <TabsList>
-          <TabsTrigger value="performance">Performance</TabsTrigger>
-          <TabsTrigger value="archive">Prediction archive</TabsTrigger>
-          <TabsTrigger value="journal">My picks journal</TabsTrigger>
-          <TabsTrigger value="diagnostics">Learning from mistakes</TabsTrigger>
-        </TabsList>
-        <TabsContent value="performance" className="mt-4">
-          <Performance lq={lq} />
-        </TabsContent>
-        <TabsContent value="archive" className="mt-4">
-          <Archive lq={lq} />
-        </TabsContent>
-        <TabsContent value="journal" className="mt-4">
-          <Journal />
-        </TabsContent>
-        <TabsContent value="diagnostics" className="mt-4">
-          <Diagnostics lq={lq} />
-        </TabsContent>
-      </Tabs>
-    </div>
+      {tab === "performance" && <Performance lq={lq} />}
+      {tab === "breakdown" && <StreaksView />}
+      {tab === "archive" && <Archive lq={lq} />}
+      {tab === "journal" && <Journal />}
+      {tab === "diagnostics" && <Diagnostics lq={lq} />}
+    </>
+  );
+}
+
+export default function PicksTracker() {
+  return (
+    <Suspense fallback={<Skeleton className="h-[60vh]" />}>
+      <PicksWorkspace />
+    </Suspense>
   );
 }
 
@@ -59,30 +63,18 @@ function Performance({ lq }: { lq: string }) {
   return (
     <div className="space-y-4">
       {s.data.is_demo && <div className="rounded-lg border border-flare/30 bg-flare/5 px-3 py-2 text-xs text-flare">These results grade a walk-forward backtest on synthetic demo games and demo odds. They describe the pipeline, not real-world accuracy.</div>}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-8">
-        {[
-          ["Total", t.n.toLocaleString()],
-          ["Correct", t.wins.toLocaleString()],
-          ["Incorrect", t.losses.toLocaleString()],
-          ["Pushes", t.pushes],
-        ].map(([k, v]) => (
-          <Panel key={k as string} className="p-4">
-            <Stat label={k} value={v} />
-          </Panel>
-        ))}
-        <Panel className="p-4">
-          <Stat label="Win %" value={pct(t.win_pct)} sub={`CI ${pct(t.win_pct_ci[0], 0)}–${pct(t.win_pct_ci[1], 0)}`} tone="volt" />
-        </Panel>
-        <Panel className="p-4">
-          <Stat label="Avg predicted" value={pct(t.avg_pred_prob)} hint="If calibrated, this should match Win %." />
-        </Panel>
-        <Panel className="p-4">
-          <Stat label="Brier / log loss" value={num(t.brier, 3)} sub={`log loss ${num(t.log_loss, 3)}`} />
-        </Panel>
-        <Panel className="p-4">
-          <Stat label="Hypothetical units" value={signed(t.units, 1)} sub={`ROI ${pct(t.roi, 1)} · ${t.priced_n} priced`} tone={(t.units ?? 0) >= 0 ? "gain" : "loss"} hint="1 unit flat stake at the archived price, only where a valid price and settlement exist." />
-        </Panel>
-      </div>
+      <Panel>
+        <StatStrip className="border-0">
+          <Stat label="Graded" value={t.n.toLocaleString()} sub={`${t.wins.toLocaleString()}–${t.losses.toLocaleString()}${t.pushes ? `–${t.pushes}` : ""}`} />
+          <Stat label="Win %" value={pct(t.win_pct)} sub={`95% CI ${pct(t.win_pct_ci[0], 0)}–${pct(t.win_pct_ci[1], 0)}`} tone="volt" />
+          <Stat label="Avg predicted" value={pct(t.avg_pred_prob)} hint="If the forecasts are calibrated, this matches Win %." />
+          <Stat label="Brier" value={num(t.brier, 3)} sub={`log loss ${num(t.log_loss, 3)}`} />
+          <Stat label="Units" value={signed(t.units, 1)} sub={`ROI ${pct(t.roi, 1)} · ${t.priced_n} priced`} tone={(t.units ?? 0) >= 0 ? "gain" : "loss"} hint="1 unit flat stake at the archived price, where a valid price and settlement exist." />
+          {Object.entries<PerfBlock>(s.data.by_market ?? {}).map(([k, b]) => (
+            <Stat key={k} label={MARKET_LABEL[k] ?? k} value={pct(b.win_pct, 1)} sub={`${b.wins}–${b.losses}`} />
+          ))}
+        </StatStrip>
+      </Panel>
       <div className="grid gap-4 lg:grid-cols-2">
         <Panel>
           <PanelHeader eyebrow="Calibration" title="Predicted probability vs observed hit rate" />
@@ -372,7 +364,7 @@ function Journal() {
   return (
     <div className="grid gap-4 xl:grid-cols-[380px_1fr]">
       <Panel>
-        <PanelHeader eyebrow="New entry" title="Record a pick" icon={<Plus className="h-4 w-4 text-volt" />} />
+        <PanelHeader eyebrow="New entry" title="Record a pick" />
         <form
           className="grid grid-cols-2 gap-3 p-4"
           onSubmit={(e) => {
@@ -452,13 +444,15 @@ function Journal() {
         </form>
       </Panel>
       <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
-          <Panel className="p-4"><Stat label="Picks" value={s?.total ?? "—"} sub={`${s?.pending ?? 0} pending`} /></Panel>
-          <Panel className="p-4"><Stat label="Record" value={s ? `${s.wins}-${s.losses}-${s.pushes}` : "—"} /></Panel>
-          <Panel className="p-4"><Stat label="Win %" value={pct(s?.win_pct)} tone="volt" /></Panel>
-          <Panel className="p-4"><Stat label="Units" value={signed(s?.units, 2)} tone={(s?.units ?? 0) >= 0 ? "gain" : "loss"} /></Panel>
-          <Panel className="p-4"><Stat label="ROI" value={pct(s?.roi, 1)} /></Panel>
-        </div>
+        <Panel>
+          <StatStrip className="border-0">
+          <Stat label="Picks" value={s?.total ?? "—"} sub={`${s?.pending ?? 0} pending`} />
+          <Stat label="Record" value={s ? `${s.wins}-${s.losses}-${s.pushes}` : "—"} />
+          <Stat label="Win %" value={pct(s?.win_pct)} tone="volt" />
+          <Stat label="Units" value={signed(s?.units, 2)} tone={(s?.units ?? 0) >= 0 ? "gain" : "loss"} />
+          <Stat label="ROI" value={pct(s?.roi, 1)} />
+          </StatStrip>
+        </Panel>
         <Panel>
           <PanelHeader eyebrow="Journal" title="Your selections" right={<Button size="sm" asChild><a href={exportUrl("picks", "xlsx")}><Download className="h-3.5 w-3.5" /> Export</a></Button>} />
           <div className="overflow-x-auto">

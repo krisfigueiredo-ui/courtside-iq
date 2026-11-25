@@ -1,52 +1,55 @@
 "use client";
 
-import { AnimatePresence, motion } from "framer-motion";
-import { Bot, Expand, X } from "lucide-react";
-import Link from "next/link";
+import { X } from "lucide-react";
 import { usePathname } from "next/navigation";
+import { useEffect } from "react";
 
 import { AIChat } from "@/components/shell/AIChat";
+import { cn } from "@/lib/format";
+import { usePrefs, useSelection } from "@/lib/store";
 
-export function AIPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
+/** Collapsible assistant dock. Docked beside the workspace on wide screens, overlaid on small ones.
+ *  The assistant is told what the viewer has selected (game, team, player, market, page). */
+export function AIDock() {
+  const { aiOpen, setAiOpen } = usePrefs();
+  const sel = useSelection();
   const path = usePathname();
-  const gameMatch = path.match(/^\/games\/(\d+)/);
-  const playerMatch = path.match(/^\/players\/(\d+)/);
-  const context = gameMatch ? { page: path, game_id: Number(gameMatch[1]) } : playerMatch ? { page: path, player_id: Number(playerMatch[1]) } : { page: path };
+  const gameId = Number(path.match(/^\/games\/(\d+)/)?.[1]) || sel.game?.id;
+  const playerId = Number(path.match(/^\/players\/(\d+)/)?.[1]) || sel.player?.id;
+  const teamId = Number(path.match(/^\/teams\/(\d+)/)?.[1]) || sel.team?.id;
+  const context = {
+    page: path,
+    ...(gameId ? { game_id: gameId, game: sel.game?.label } : {}),
+    ...(teamId ? { team_id: teamId, team: sel.team?.label } : {}),
+    ...(playerId ? { player_id: playerId, player: sel.player?.label } : {}),
+    ...(sel.market ? { market: sel.market } : {}),
+  };
+  const chips = [sel.game?.label && `Game: ${sel.game.label}`, sel.team?.label && `Team: ${sel.team.label}`, sel.player?.label && `Player: ${sel.player.label}`, sel.market && `Market: ${sel.market}`].filter(Boolean) as string[];
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && aiOpen && window.innerWidth < 1280 && setAiOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [aiOpen, setAiOpen]);
+  if (!aiOpen) return null;
   return (
-    <AnimatePresence>
-      {open && (
-        <motion.div className="fixed inset-0 z-[70]" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px]" onClick={onClose} />
-          <motion.aside
-            initial={{ x: 480 }}
-            animate={{ x: 0 }}
-            exit={{ x: 480 }}
-            transition={{ type: "spring", stiffness: 340, damping: 34 }}
-            className="absolute inset-y-0 right-0 flex w-full max-w-[460px] flex-col border-l border-line bg-ink-950/98"
-          >
-            <div className="flex items-center justify-between border-b border-line px-4 py-3">
-              <div className="flex items-center gap-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-volt to-cyan">
-                  <Bot className="h-4 w-4 text-white" />
-                </div>
-                <div>
-                  <div className="font-display text-sm font-semibold text-mist">COURTSIDE AI</div>
-                  <div className="text-[10.5px] text-mist-500">Answers from verified platform records, with citations</div>
-                </div>
-              </div>
-              <div className="flex items-center gap-1">
-                <Link href="/ai" onClick={onClose} className="rounded-md p-1.5 text-mist-400 hover:bg-ink-800 hover:text-mist" aria-label="Open research page">
-                  <Expand className="h-4 w-4" />
-                </Link>
-                <button onClick={onClose} className="rounded-md p-1.5 text-mist-400 hover:bg-ink-800 hover:text-mist" aria-label="Close assistant">
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-            <AIChat compact context={context} />
-          </motion.aside>
-        </motion.div>
-      )}
-    </AnimatePresence>
+    <>
+      <div className="fixed inset-0 z-[70] bg-black/40 xl:hidden" onClick={() => setAiOpen(false)} aria-hidden />
+      <aside
+        aria-label="COURTSIDE AI"
+        className={cn("fixed inset-y-0 right-0 z-[71] flex w-full max-w-[400px] flex-col border-l border-hair bg-surface xl:static xl:z-auto xl:w-[380px] xl:max-w-none")}
+      >
+        <div className="flex h-10 shrink-0 items-center justify-between border-b border-hair px-3">
+          <span className="text-sm font-semibold text-fg">COURTSIDE AI</span>
+          <button onClick={() => setAiOpen(false)} className="p-1 text-muted hover:text-fg" aria-label="Close assistant">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="flex flex-wrap gap-1 border-b border-hair px-3 py-1.5 text-2xs text-subtle">
+          <span>Context:</span>
+          {chips.length ? chips.map((c) => <span key={c} className="text-fg-2">{c}</span>) : <span className="text-fg-2">{path === "/" ? "Command Center" : path}</span>}
+        </div>
+        <AIChat compact context={context} />
+      </aside>
+    </>
   );
 }

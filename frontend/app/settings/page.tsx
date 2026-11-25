@@ -1,5 +1,7 @@
 "use client";
 
+import { usePrefs } from "@/lib/store";
+
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, CircleSlash, KeyRound, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -9,6 +11,7 @@ import { STATIC, STATIC_MESSAGE, api, useApi } from "@/lib/api";
 import { ago, cn } from "@/lib/format";
 
 const PROVIDERS: Record<string, { env: string; label: string; docs: string; covers: string }> = {
+  espn: { env: "DATA_SOURCE=espn", label: "ESPN (public API)", docs: "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard", covers: "NBA and Division I schedules, live scores, box scores, DraftKings opening and closing lines, NBA injuries and rosters; no key" },
   balldontlie: { env: "BALLDONTLIE_API_KEY", label: "BALLDONTLIE", docs: "https://docs.balldontlie.io", covers: "NBA games, live scores, box scores, active rosters, injuries; NCAAB on supported tiers" },
   the_odds_api: { env: "ODDS_API_KEY", label: "The Odds API", docs: "https://the-odds-api.com/liveapi/guides/v4/", covers: "US sportsbook moneylines, spreads, totals; 1H totals, team totals and player props via event odds" },
   sportsdataio: { env: "SPORTSDATAIO_API_KEY", label: "SportsDataIO", docs: "https://sportsdata.io/developers", covers: "Configuration and health only; map endpoints for your subscription tier" },
@@ -22,6 +25,7 @@ export default function SettingsPage() {
     mutationFn: () => api("/api/admin/refresh", { method: "POST", headers: token ? { "X-Admin-Token": token } : {} }),
     onSuccess: () => qc.invalidateQueries(),
   });
+  const { theme, setTheme } = usePrefs();
   const [density, setDensity] = useState<"comfortable" | "compact">("comfortable");
   const [motion, setMotion] = useState<"on" | "reduced">("on");
   useEffect(() => {
@@ -40,13 +44,13 @@ export default function SettingsPage() {
   const d = s.data;
   return (
     <div className="space-y-6">
-      <PageHeader index="13" title="Settings" subtitle="Provider connectivity, model configuration, refresh cadence, AI controls, licensed assets and appearance. API keys are read from server environment variables and never sent to the browser." />
+      <PageHeader title="Settings" />
       <div className="grid gap-6 xl:grid-cols-2">
         <Panel>
           <PanelHeader eyebrow="Data providers" title="Connectivity & health" right={<Badge tone={d.demo ? "flare" : "gain"}>{d.demo ? "Demo mode" : "Live mode"}</Badge>} />
           <div className="divide-y divide-line/50">
             {Object.entries<any>(d.providers).map(([k, v]) => {
-              const p = PROVIDERS[k];
+              const p = PROVIDERS[k] ?? { env: "", label: k, docs: "", covers: "" };
               return (
                 <div key={k} className="px-4 py-3">
                   <div className="flex items-center justify-between">
@@ -124,7 +128,11 @@ export default function SettingsPage() {
               <span className="text-sm text-mist-300">Motion</span>
               <Segmented size="sm" value={motion} onChange={(v) => { setMotion(v); save("ciq-motion", v); }} options={[{ value: "on", label: "Animated" }, { value: "reduced", label: "Reduced" }]} />
             </div>
-            <p className="text-[11px] text-mist-500">Theme: COURTSIDE dark (navy / electric blue). Preferences are stored locally in this browser only.</p>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-mist-300">Theme</span>
+              <Segmented size="sm" value={theme} onChange={setTheme} options={[{ value: "system", label: "System" }, { value: "dark", label: "Dark" }, { value: "light", label: "Light" }]} />
+            </div>
+            <p className="text-[11px] text-mist-500">Preferences are stored in this browser only.</p>
           </div>
         </Panel>
       </div>

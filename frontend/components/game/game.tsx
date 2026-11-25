@@ -1,8 +1,8 @@
 "use client";
 
-import { motion } from "framer-motion";
 import Link from "next/link";
 
+import { MarketChart, type MarketKind, type MovePoint } from "@/components/charts/MarketChart";
 import { C, EChart, baseAxis, tooltip } from "@/components/charts/EChart";
 import { pairColors, PlayerPortrait, TeamCrest } from "@/components/identity/identity";
 import { Badge, DemoBadge, LiveDot, ProbBar, Tip } from "@/components/ui/primitives";
@@ -12,91 +12,79 @@ import type { BoardRow, Explain, Game, PropProjection, Simulation, Team, VsMarke
 export function StatusPill({ g }: { g: Game }) {
   if (g.status === "live")
     return (
-      <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md bg-loss/10 px-2 py-0.5 font-mono text-[11px] font-semibold text-loss">
+      <span className="num inline-flex items-center gap-1 whitespace-nowrap text-xs text-live">
         <LiveDot /> {periodLabel(g.league, g.period, g.clock, g.status)}
       </span>
     );
-  if (g.status === "final") return <span className="whitespace-nowrap rounded-md bg-ink-700 px-2 py-0.5 font-mono text-[11px] font-semibold text-mist-300">FINAL</span>;
-  return <span className="whitespace-nowrap rounded-md bg-volt/10 px-2 py-0.5 font-mono text-[11px] font-semibold text-volt-300">{timeShort(g.start_time)}</span>;
+  if (g.status === "final") return <span className="num whitespace-nowrap text-xs text-subtle">Final</span>;
+  if (g.status === "postponed") return <span className="num whitespace-nowrap text-xs text-warn">Postponed</span>;
+  return <span className="num whitespace-nowrap text-xs text-fg-2">{timeShort(g.start_time)}</span>;
 }
 
-/** Matchup card used on the Command Center and league centers. */
-export function MatchupCard({ row, index = 0 }: { row: BoardRow; index?: number }) {
+/** Compact matchup block: teams, score or projection, win probability and model vs market. */
+export function MatchupCard({ row }: { row: BoardRow; index?: number }) {
   const g = row.game;
   const s = row.simulation;
   const vs = row.vs_market;
   const sp = vs.spread;
   const tot = vs.total;
   const showScore = g.status !== "scheduled";
+  const [ca, ch] = pairColors(g.away, g.home);
   return (
-    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(index * 0.04, 0.4) }}>
-      <Link href={`/games/${g.id}`} className="panel panel-hover group block overflow-hidden">
-        <div className="relative">
-          <div
-            className="pointer-events-none absolute inset-0 opacity-[0.14]"
-            style={{ background: `linear-gradient(120deg, ${g.away.primary} 0%, transparent 42%, transparent 58%, ${g.home.primary} 100%)` }}
-          />
-          <div className="relative flex items-center justify-between px-4 pt-3">
-            <div className="flex items-center gap-1.5">
-              <Badge tone={g.league === "NBA" ? "volt" : "cyan"}>{g.league}</Badge>
-              {g.neutral && <Badge>Neutral</Badge>}
-              <DemoBadge show={g.is_demo} />
-            </div>
-            <StatusPill g={g} />
+    <Link href={`/games/${g.id}`} className="panel panel-hover block min-w-0">
+      <div className="flex items-center justify-between border-b border-hair px-3 py-1.5 text-2xs text-subtle">
+        <span>
+          {g.league === "CBB" ? "NCAA" : "NBA"}
+          {g.neutral ? " · neutral" : ""}
+        </span>
+        <span className="flex items-center gap-1.5">
+          <DemoBadge show={g.is_demo} />
+          <StatusPill g={g} />
+        </span>
+      </div>
+      <div className="space-y-1 px-3 py-2">
+        {[
+          { t: g.away, score: g.away_score, proj: row.projected.away_score, p: s.win_prob_away },
+          { t: g.home, score: g.home_score, proj: row.projected.home_score, p: s.win_prob_home },
+        ].map(({ t, score, proj, p }) => (
+          <div key={t.id} className="grid grid-cols-[22px_minmax(0,1fr)_auto_44px] items-center gap-2">
+            <TeamCrest team={t} size={22} />
+            <span className="truncate text-sm text-fg">{t.name}</span>
+            <span className={cn("num text-base", showScore ? "text-fg" : "text-muted")} title={showScore ? `projected ${num(proj, 0)}` : "projected"}>
+              {showScore ? (score ?? "–") : num(proj, 0)}
+            </span>
+            <span className="num text-right text-xs text-muted">{pct(p, 0)}</span>
           </div>
-          <div className="relative space-y-2 px-4 py-3">
-            {[
-              { t: g.away, score: g.away_score, proj: row.projected.away_score, p: s.win_prob_away },
-              { t: g.home, score: g.home_score, proj: row.projected.home_score, p: s.win_prob_home },
-            ].map(({ t, score, proj, p }) => (
-              <div key={t.id} className="flex items-center gap-3">
-                <TeamCrest team={t} size={34} />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate font-display text-[14.5px] font-semibold leading-tight text-mist">{t.location}</div>
-                  <div className="truncate text-[11px] text-mist-400">{t.nickname}</div>
-                </div>
-                <div className="text-right">
-                  <div className={cn("font-mono text-lg font-bold tabular leading-tight", showScore ? "text-white" : "text-mist-300")}>{showScore ? score ?? "—" : num(proj, 0)}</div>
-                  <div className="font-mono text-[10.5px] text-mist-500">{showScore ? `proj ${num(proj, 0)}` : "proj"}</div>
-                </div>
-                <div className="w-12 text-right font-mono text-[12px] font-semibold text-volt-300">{pct(p, 0)}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div className="px-4">
-          <ProbBar left={s.win_prob_away} right={s.win_prob_home} leftColor={pairColors(g.away, g.home)[0]} rightColor={pairColors(g.away, g.home)[1]} />
-        </div>
-        <div className="mt-3 grid grid-cols-3 divide-x divide-line/60 border-t border-line/60">
-          <MiniMetric label="Spread" vegas={sp ? spreadLine(sp.market_line_home) : "—"} model={spreadLine(row.projected.spread_home)} edge={sp?.line_diff} />
-          <MiniMetric label="Total" vegas={tot ? num(tot.market_line, 1) : "—"} model={num(row.projected.total, 1)} edge={tot ? tot.line_diff : undefined} />
-          <MiniMetric
-            label="Win %"
-            vegas={vs.moneyline ? pct(vs.moneyline.no_vig_home, 0) : "—"}
-            model={pct(s.win_prob_home, 0)}
-            edgeText={vs.moneyline ? `${signed(vs.moneyline.diff_home * 100, 1)} pp` : undefined}
-            hot={vs.moneyline ? Math.abs(vs.moneyline.diff_home) >= 0.05 : false}
-          />
-        </div>
-      </Link>
-    </motion.div>
+        ))}
+      </div>
+      <ProbBar left={s.win_prob_away} right={s.win_prob_home} leftColor={ca} rightColor={ch} className="px-3" />
+      <div className="mt-2 grid grid-cols-3 divide-x divide-hair border-t border-hair">
+        <MiniMetric label="Spread" vegas={sp ? spreadLine(sp.market_line_home) : "–"} model={spreadLine(row.projected.spread_home)} edge={sp?.line_diff} />
+        <MiniMetric label="Total" vegas={tot ? num(tot.market_line, 1) : "–"} model={num(row.projected.total, 1)} edge={tot ? tot.line_diff : undefined} />
+        <MiniMetric
+          label="Home win"
+          vegas={vs.moneyline ? pct(vs.moneyline.no_vig_home, 0) : "–"}
+          model={pct(s.win_prob_home, 0)}
+          edgeText={vs.moneyline ? `${signed(vs.moneyline.diff_home * 100, 1)}pp` : undefined}
+          hot={vs.moneyline ? Math.abs(vs.moneyline.diff_home) >= 0.05 : false}
+        />
+      </div>
+    </Link>
   );
 }
 
 function MiniMetric({ label, vegas, model, edge, edgeText, hot }: { label: string; vegas: string; model: string; edge?: number; edgeText?: string; hot?: boolean }) {
   const isHot = hot ?? (edge != null && Math.abs(edge) >= 2);
   return (
-    <div className="min-w-0 px-3 py-2.5">
-      <div className="label truncate">{label}</div>
-      <div className="mt-1 grid grid-cols-[auto_1fr] gap-x-2 font-mono text-[12px] leading-5 tabular">
-        <span className="text-[10px] text-mist-500">VEG</span>
-        <span className="text-right text-mist-300">{vegas}</span>
-        <span className="text-[10px] text-volt-300">AI</span>
-        <span className="text-right font-semibold text-volt-300">{model}</span>
+    <div className="min-w-0 px-2.5 py-1.5">
+      <div className="text-2xs text-subtle">{label}</div>
+      <div className="num grid grid-cols-[auto_1fr] gap-x-2 text-xs leading-5">
+        <span className="text-subtle">Mkt</span>
+        <span className="text-right text-fg-2">{vegas}</span>
+        <span className="text-accent">Mdl</span>
+        <span className="text-right text-fg">{model}</span>
       </div>
-      {(edge != null || edgeText) && (
-        <div className={cn("mt-0.5 text-right font-mono text-[10.5px]", isHot ? "text-flare" : "text-mist-500")}>Δ {edgeText ?? signed(edge, 1)}</div>
-      )}
+      {(edge != null || edgeText) && <div className={cn("num text-right text-2xs", isHot ? "text-accent" : "text-subtle")}>Δ {edgeText ?? signed(edge, 1)}</div>}
     </div>
   );
 }
@@ -178,7 +166,7 @@ export function EVChips({ vs, g }: { vs: VsMarket; g: Game }) {
   return (
     <div className="flex flex-wrap gap-2">
       {chips.map((c) => (
-        <span key={c.label} className={cn("rounded-lg border px-2.5 py-1.5 text-xs", c.ev > 0 ? "border-gain/30 bg-gain/5 text-gain" : "border-line bg-ink-900 text-mist-400")}>
+        <span key={c.label} className={cn("border-l-2 px-2 py-0.5 text-xs", c.ev > 0 ? "border-pos text-fg" : "border-hair text-muted")}>
           <span className="font-medium">{c.label}</span>
           <span className="ml-2 font-mono">{signed(c.ev * 100, 1)}% EV</span>
         </span>
@@ -231,10 +219,10 @@ export function ShapBars({ items, title }: { items: Explain[]; title?: string })
           <span className="truncate text-mist-300" title={i.feature}>
             {featureLabel(i.feature)} <span className="font-mono text-mist-500">({num(i.value, Math.abs(i.value) < 2 ? 3 : 1)})</span>
           </span>
-          <div className="relative h-2 rounded-full bg-ink-700">
+          <div className="relative h-1.5 bg-hair">
             <div className="absolute top-0 h-2 w-px bg-mist-500 left-1/2" />
             <div
-              className="absolute top-0 h-2 rounded-full"
+              className="absolute top-0 h-1.5"
               style={{
                 left: i.contribution >= 0 ? "50%" : `${50 - (Math.abs(i.contribution) / max) * 50}%`,
                 width: `${(Math.abs(i.contribution) / max) * 50}%`,
@@ -281,32 +269,8 @@ export function WinGauge({ p, home, away, size = 180 }: { p: number; home: Team;
   );
 }
 
-export function LineMovementChart({ series, market, height = 240 }: { series: Record<string, { t: string; book: string; line: number | null; price: number }[]>; market: "spreads" | "totals" | "h2h"; height?: number }) {
-  const pts = series[market] ?? [];
-  const books = Array.from(new Set(pts.map((p) => p.book)));
-  const palette = [C.volt, C.cyan, C.flare, C.violet, C.gold];
-  return (
-    <EChart
-      height={height}
-      option={{
-        grid: { left: 44, right: 16, top: 30, bottom: 30 },
-        legend: { top: 0, textStyle: { color: C.mist4, fontSize: 11 }, icon: "roundRect", itemWidth: 10, itemHeight: 4 },
-        tooltip: { ...tooltip },
-        xAxis: { type: "time", ...baseAxis },
-        yAxis: { type: "value", scale: true, ...baseAxis },
-        series: books.map((b, i) => ({
-          name: b,
-          type: "line",
-          step: "end",
-          showSymbol: true,
-          symbolSize: 5,
-          lineStyle: { width: 2, color: palette[i % palette.length] },
-          itemStyle: { color: palette[i % palette.length] },
-          data: pts.filter((p) => p.book === b).map((p) => [p.t, market === "h2h" ? p.price : p.line]),
-        })),
-      }}
-    />
-  );
+export function LineMovementChart({ series, market, height = 240, model, homeAbbr }: { series: Record<string, MovePoint[]>; market: MarketKind; height?: number; model?: number | null; homeAbbr?: string }) {
+  return <MarketChart points={series[market] ?? []} market={market} height={height} model={model} homeAbbr={homeAbbr} />;
 }
 
 export function PropCard({ p, stat, onClick, active }: { p: PropProjection; stat: string; onClick?: () => void; active?: boolean }) {
@@ -317,7 +281,7 @@ export function PropCard({ p, stat, onClick, active }: { p: PropProjection; stat
   const lean = m?.p_over != null ? (m.p_over >= (m.p_under ?? 0) ? "over" : "under") : null;
   const leanP = lean === "over" ? m?.p_over : m?.p_under;
   return (
-    <button onClick={onClick} className={cn("panel panel-hover w-full overflow-hidden text-left", active && "border-volt/60 shadow-glow")}>
+    <button onClick={onClick} className={cn("panel panel-hover w-full overflow-hidden text-left", active && "border-accent")}>
       <div className="flex gap-3 p-3">
         <PlayerPortrait player={pl} size={64} />
         <div className="min-w-0 flex-1">

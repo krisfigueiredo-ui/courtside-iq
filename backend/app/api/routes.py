@@ -407,6 +407,16 @@ def perf_breakdown(by: str = "market", league: str | None = None, min_n: int = 5
     return _clean(performance.breakdown(db, by, league.upper() if league else None, min_n))
 
 
+@router.get("/performance/streaks")
+def perf_streaks(by: str = "team", league: str | None = None, market: str = "all", min_n: int = 3, db: Session = Depends(get_db)):
+    """Prediction streaks and splits by team, player or conference, plus results streaks against the closing line."""
+    from ..services import streaks
+
+    if by not in ("team", "player", "conference"):
+        raise HTTPException(400, "by must be team|player|conference")
+    return _clean(streaks.streaks(db, by, league.upper() if league else None, market, min_n))
+
+
 @router.get("/performance/clv")
 def perf_clv(league: str | None = None, db: Session = Depends(get_db)):
     return _clean(performance.clv_report(db, league.upper() if league else None))

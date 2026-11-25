@@ -10,34 +10,33 @@ const celtics: Team = {
 };
 
 describe("identity system", () => {
-  it("renders an original crest with the team's abbreviation when no licensed logo exists", () => {
+  it("falls back to a colour tag with the team's abbreviation when no logo asset exists", () => {
     render(<TeamCrest team={celtics} />);
-    expect(screen.getByRole("img", { name: "Boston Celtics crest" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Boston Celtics" })).toBeInTheDocument();
     expect(screen.getByText("BOS")).toBeInTheDocument();
   });
 
-  it("uses the registered licensed logo for that exact team", () => {
+  it("uses the registered logo asset for that exact team", () => {
     render(<TeamCrest team={{ ...celtics, logo: { url: "https://cdn.example/bos.svg", license: "x", source: "y", verified: true } }} />);
     const img = screen.getByAltText("Boston Celtics logo") as HTMLImageElement;
     expect(img.src).toBe("https://cdn.example/bos.svg");
   });
 
   it("picks readable text colours", () => {
-    expect(readableOn("#FFFFFF")).toBe("#0A1222");
+    expect(readableOn("#FFFFFF")).toBe("#111214");
     expect(readableOn("#00471B")).toBe("#FFFFFF");
   });
 
-  it("draws the player's verified jersey number in team colours", () => {
+  it("falls back to the jersey number when no headshot exists, and flags unverified rosters", () => {
     const p: Player = { id: 1, league: "NBA", name: "Jaylen Brown", first: "Jaylen", last: "Brown", position: "G-F", jersey: "7", team: celtics,
       roster: { verified: false, source: "static_seed_2025_26", season: "2025-26", verified_at: null }, portrait: null };
-    const { container } = render(<PlayerPortrait player={p} />);
-    expect(screen.getByRole("img", { name: "Jaylen Brown illustrated avatar" })).toBeInTheDocument();
-    expect(container.querySelector("text:last-of-type")?.textContent).toBe("7");
+    render(<PlayerPortrait player={p} />);
+    expect(screen.getByRole("img", { name: "Jaylen Brown" })).toHaveTextContent("7");
     render(<RosterBadge player={p} />);
-    expect(screen.getByText(/seed roster/i)).toBeInTheDocument();
+    expect(screen.getByText(/unverified roster/i)).toBeInTheDocument();
   });
 
-  it("keeps team colours visible and distinguishable on the dark UI", () => {
+  it("keeps team colours visible and distinguishable on either theme", () => {
     const wizards = { primary: "#002B5C", secondary: "#E31837" };
     const jazz = { primary: "#002B5C", secondary: "#F9A01B" };
     expect(displayColor(celtics)).toBe("#007A33");
