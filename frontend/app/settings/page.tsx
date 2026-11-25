@@ -73,7 +73,7 @@ export default function SettingsPage() {
               );
             })}
           </div>
-          <p className="px-4 pb-3 text-[11px] text-mist-500">Without any provider key the platform runs on a clearly labelled synthetic simulator. Bookmakers are shown only when the connected odds feed returns them.</p>
+          <p className="px-4 pb-3 text-[11px] text-mist-500">By default games, live scores, DraftKings lines, box scores, injuries and rosters come from ESPN's public API (no key needed). The Odds API adds more sportsbooks and player prop lines. DATA_SOURCE=demo runs on the clearly labelled synthetic dataset instead.</p>
         </Panel>
         <Panel>
           <PanelHeader eyebrow="Runtime" title="Refresh cadence, storage & models" />

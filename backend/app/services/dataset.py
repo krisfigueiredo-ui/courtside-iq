@@ -79,5 +79,7 @@ def feature_frame(db: Session, league: str) -> pd.DataFrame:
         return g
     f = build_features(g, teams_df(db, league), league)
     f = f.merge(g[["id", "start_time", "season", "status", "is_historical_sim", "home_team_id", "away_team_id"]], on="id")
-    # market lines are NOT model features; they are used only for the market-informed blend
-    return f.merge(market_lines(db, league), on="id", how="left")
+    # market lines are NOT model features; they are used only for the market-informed blend.
+    # Real games are forecast at tip-off against the closing line; the demo feed an hour before.
+    lead = 55 if g["is_demo"].any() else 3
+    return f.merge(market_lines(db, league, lead_minutes=lead), on="id", how="left")

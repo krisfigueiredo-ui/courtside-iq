@@ -92,13 +92,15 @@ METHODOLOGY = [
      "simulations sharing a game-flow multiplier so points, assists and threes are positively correlated; PRA is summed per draw.", "/props"),
     ("methodology-validation", "Validation and leakage policy",
      "Training uses strict chronological splits (70% train, 15% calibration, 15% test) plus expanding-window walk-forward folds. "
-     "Features for each game are computed only from games completed before tip-off. Current-season predictions in demo mode are "
-     "a walk-forward backtest from a model trained before the season began. Metrics on synthetic demo data describe the simulator, "
-     "not real-world accuracy.", "/model"),
-    ("policy-demo", "Demo mode",
-     "When no provider API keys are configured the platform runs on a synthetic league simulator. All demo games, odds and statistics are "
-     "flagged is_demo and labelled DEMO in the interface. Real player names in the seed roster use 2025-26 affiliations and are marked "
-     "unverified until a provider roster sync.", "/settings"),
+     "Features for each game are computed only from games completed before tip-off. Current-season predictions are a walk-forward "
+     "backtest from a model trained only on earlier seasons; for real games each forecast is frozen at tip-off and graded against "
+     "the DraftKings closing line. Metrics on synthetic demo data describe the simulator, not real-world accuracy.", "/model"),
+    ("policy-data-sources", "Data sources",
+     "By default the platform uses ESPN's public site API: NBA and NCAA Division I men's schedules, live scores, final scores, team and "
+     "player box scores, DraftKings opening and closing lines (spread, total, moneyline), the NBA injury report and NBA rosters. "
+     "ESPN's API is unofficial and undocumented. Closing lines carry no timestamp and are recorded five minutes before tip-off. "
+     "Player prop lines and additional sportsbooks require The Odds API. With DATA_SOURCE=demo the platform runs on a synthetic "
+     "league simulator; demo rows are flagged is_demo and labelled DEMO in the interface.", "/settings"),
 ]
 
 

@@ -92,7 +92,8 @@ def export(out_dir: Path | str, window_days: int = GAME_WINDOW_DAYS) -> dict:
                                                    m.Game.start_time <= now + timedelta(days=window_days))).all()
         game_ids = set(games)
         teams = db.scalars(select(m.Team.id)).all()
-        players = db.scalars(select(m.Player.id)).all()
+        # players on a current roster (the pages the site links to)
+        players = sorted(set(db.scalars(select(m.RosterMembership.player_id).where(m.RosterMembership.end_date.is_(None)))))
         for tid in teams:
             detail = save(client, f"/api/teams/{tid}")
             save(client, f"/api/trends/team/{tid}")

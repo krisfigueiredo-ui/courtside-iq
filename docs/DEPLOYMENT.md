@@ -13,22 +13,28 @@
 `docker compose up --build` starts the whole stack locally. For production, run the same images on your orchestrator (ECS, Cloud Run, Kubernetes, Fly):
 
 1. **Database**: a managed Postgres 15+ with pgvector (RDS, Cloud SQL, Neon and Supabase all support it). Set `DATABASE_URL=postgresql+psycopg://…`.
-2. **Secrets**: keep `BALLDONTLIE_API_KEY`, `ODDS_API_KEY`, `ANTHROPIC_API_KEY`, `ADMIN_TOKEN` and `POSTGRES_PASSWORD` in your secret manager and inject them as env vars into `api` and `worker` only. The web container needs none.
+2. **Secrets**: no key is needed for ESPN data. Keep `BALLDONTLIE_API_KEY`, `ODDS_API_KEY`, `ANTHROPIC_API_KEY`, `ADMIN_TOKEN` and `POSTGRES_PASSWORD` in your secret manager and inject them as env vars into `api` and `worker` only. The web container needs none.
 3. **Migrations**: run automatically on `api` start; for a dedicated release step, run `alembic upgrade head`.
 4. **Persistent volumes**: `artifacts/` (trained model files referenced by `model_versions.artifact_path`) and `data/raw/` (original import files). On ephemeral platforms, mount object storage or a shared volume.
 5. **CORS / origin**: the web app proxies the API, so browsers only talk to one origin. If you expose the API directly, set `CORS_ORIGINS`, and `NEXT_PUBLIC_API_URL` at web build time.
 6. **SSE**: `/api/stream/ticker` is a long-lived response. Disable proxy buffering (the API sends `X-Accel-Buffering: no`) and allow idle timeouts above 60s. The frontend falls back to 20s polling automatically.
 7. **Scaling**: the API is stateless apart from an in-process feature cache; scale it horizontally. Keep one worker so forecasts aren't frozen twice.
 
-## Demo data
+## Data
 
-In demo mode an empty database is populated from `backend/data/demo_snapshot` on first start (see [DATA.md](DATA.md)). Set `USE_DEMO_SNAPSHOT=false` to regenerate the data with the simulator instead.
+With the default `DATA_SOURCE=espn`, the first start restores the committed real-data snapshot
+(`backend/data/espn_snapshot`, see [DATA.md](DATA.md)) into an empty database and then brings it
+up to date from ESPN's public API: results and box scores since the snapshot, the next seven days
+of schedule with DraftKings lines, the NBA injury report and NBA rosters. Without a snapshot it
+loads the configured number of seasons from ESPN (about 12,000 requests; responses for past days
+are cached in `backend/data/espn_cache`). The scheduler then refreshes scores and lines every
+`ESPN_POLL_SECONDS`, the schedule hourly, injuries every 30 minutes and rosters every six hours.
 
-## Switching from demo to live data
+The Odds API (`ODDS_API_KEY`) adds player prop lines, first-half and team totals and more
+sportsbooks on top of the ESPN feed.
 
-1. Set provider keys and restart. `/api/status` reports `mode: live`, and provider health appears in Settings.
-2. `python -m app.cli sync-rosters` verifies NBA rosters.
-3. Import real historical results (Data Management → games with box-score columns), then `python -m app.cli train --league NBA` (and CBB). New models are tagged with their data source. Demo predictions remain in the archive, flagged `is_demo`, and can be filtered or exported separately.
+`DATA_SOURCE=demo` runs on the synthetic dataset in `backend/data/demo_snapshot` instead
+(`USE_DEMO_SNAPSHOT=false` regenerates it with the simulator). The test suite uses this mode.
 
 ## Observability
 
@@ -41,12 +47,30 @@ In demo mode an empty database is populated from `backend/data/demo_snapshot` on
 
 Back up the Postgres database (predictions, settlements and picks are the irreplaceable records) and the `artifacts/` volume. Raw import files in `data/raw/` are content-addressed by SHA-256.
 
-## Static preview (GitHub Pages)
+## Static site (GitHub Pages)
 
-`.github/workflows/pages.yml` publishes a read-only build on every push to `main` and daily:
+`.github/workflows/pages.yml` publishes the site on every push to `main` and every two hours:
 
-1. `python -m app.cli bootstrap` loads the committed dataset into SQLite, trains the models and builds the prediction archive.
-2. `python -m app.cli export-static` renders every API response the web app uses into `frontend/public/data` (file names are defined by `static_key`, mirrored by `staticKey` in `frontend/lib/api.ts`).
-3. The frontend is built with `STATIC_EXPORT=1` (Next.js static export) and pushed to the `gh-pages` branch.
+1. `python -m app.cli bootstrap` restores the real-data snapshot into SQLite, syncs everything
+   since then from ESPN (the response cache is kept between runs with `actions/cache`), trains the
+   models, runs the walk-forward backtest for the current season and freezes forecasts for
+   upcoming games.
+2. `python -m app.cli export-static` renders every API response the web app uses into
+   `frontend/public/data` (file names are defined by `static_key`, mirrored by `staticKey` in
+   `frontend/lib/api.ts`).
+3. The frontend is built with `STATIC_EXPORT=1` (Next.js static export) and pushed to the
+   `gh-pages` branch.
+
+Between builds, the browser refreshes the score, period and clock of games in progress directly
+from ESPN's public scoreboard (`frontend/lib/espn-live.ts`). Forecasts stay as they were frozen
+before tip-off.
 
 GitHub Pages serves the `gh-pages` branch (Settings, Pages, Build and deployment: "Deploy from a branch", `gh-pages`, `/ (root)`).
+
+To refresh the committed snapshot:
+
+```bash
+cd backend
+python -m app.cli bootstrap
+python -m app.cli export-snapshot      # writes backend/data/espn_snapshot
+```

@@ -18,9 +18,12 @@ log = logging.getLogger("courtside")
 
 
 def bootstrap() -> dict:
-    """Create schema, seed registries, and (in demo mode) build demo data + models."""
+    """Create schema, seed registries, load data (ESPN live data or the demo dataset), train
+    models, run the walk-forward backtest for the current season, settle and index."""
+    from sqlalchemy import func
+
     from .ai import rag
-    from .services import modeling, seed
+    from .services import modeling, seed, settlement
 
     s = get_settings()
     init_db()
@@ -30,15 +33,16 @@ def bootstrap() -> dict:
         if s.demo_mode:
             from .data_mgmt import snapshot
             from .services import demo_feed
-            from sqlalchemy import func, select
-
-            from . import models as m
 
             if not db.scalar(select(func.count(m.Game.id))) and s.use_demo_snapshot and snapshot.available():
                 out["demo"] = {"snapshot": snapshot.load(db)}  # the dataset committed with the repository
             else:
                 out["demo"] = seed.generate_demo_data(db, s.random_seed)
             out["demo_catch_up"] = demo_feed.tick(db, catch_up_days=3650)
+        elif s.data_source == "espn":
+            from .services import live_data
+
+            out["espn"] = live_data.prepare(db)
         for league in ("NBA", "CBB"):
             if modeling.active_version(db, league) is None:
                 try:
@@ -46,22 +50,26 @@ def bootstrap() -> dict:
                 except ValueError as exc:
                     out[f"train_{league}"] = f"skipped: {exc}"
                     continue
-            if s.demo_mode:
-                t0 = time.time()
-                out[f"backtest_{league}"] = modeling.backfill_current_season(db, league)
-                log.info("backtest %s in %.1fs", league, time.time() - t0)
-        from .services import settlement as _st
-
-        _st.settle_all(db)
+            t0 = time.time()
+            out[f"backtest_{league}"] = modeling.backfill_current_season(db, league)
+            log.info("backtest %s in %.1fs", league, time.time() - t0)
+        settlement.settle_all(db)
         for league in ("NBA", "CBB"):
             if modeling.active_version(db, league, "props") is not None:
                 fit = modeling.fit_prop_blend(db, league)
                 out[f"prop_blend_{league}"] = fit.get("weights") or fit.get("status")
-        from .services import settlement
-
+        out["archived_upcoming"] = _archive_upcoming(db)
         out["settled"] = settlement.settle_all(db)
         out["indexed"] = rag.index_core(db) + rag.index_dynamic(db)
     return out
+
+
+def _archive_upcoming(db) -> int:
+    from datetime import datetime, timezone
+
+    from .scheduler import archive_due
+
+    return archive_due(db, datetime.now(timezone.utc))
 
 
 @asynccontextmanager

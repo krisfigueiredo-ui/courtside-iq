@@ -68,4 +68,4 @@ def game_out(db: Session, g: m.Game) -> dict:
     return dict(id=g.id, league=g.league, season=g.season, start_time=iso(g.start_time), status=g.status, period=g.period, clock=g.clock,
                 home=team_out(db, g.home_team, brief=True), away=team_out(db, g.away_team, brief=True), home_score=g.home_score,
                 away_score=g.away_score, home_h1=g.home_h1, away_h1=g.away_h1, neutral=g.neutral_site, is_demo=g.is_demo,
-                source=g.source, updated_at=iso(g.updated_at))
+                source=g.source, espn_id=(g.provider_ids or {}).get("espn"), updated_at=iso(g.updated_at))

@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useId } from "react";
+import { useId, useState } from "react";
 
 import { cn } from "@/lib/format";
 import type { Player, Team } from "@/lib/types";
 
 /* Central rendering rules for team/school identity.
- * - If a licensed logo asset is registered for the team (asset registry / licensed CDN), render it.
+ * - If a logo asset is registered for the team (ESPN CDN with live data, or a licensed CDN), render it;
+ *   if the image fails to load, fall back to the crest below.
  * - Otherwise render an ORIGINAL crest built from the team's colours and abbreviation. No
  *   trademarked artwork is bundled with the application.
  */
@@ -62,9 +63,21 @@ export function pairColors(away: Pick<Team, "primary" | "secondary">, home: Pick
 
 export function TeamCrest({ team, size = 28, className, ring = true }: { team: Pick<Team, "abbr" | "primary" | "secondary" | "logo" | "league" | "name">; size?: number; className?: string; ring?: boolean }) {
   const id = useId().replace(/:/g, "");
-  if (team.logo?.url) {
+  const [failed, setFailed] = useState(false);
+  if (team.logo?.url && !failed) {
     // eslint-disable-next-line @next/next/no-img-element
-    return <img src={team.logo.url} alt={`${team.name} logo`} width={size} height={size} className={cn("shrink-0 object-contain", className)} />;
+    return (
+      <img
+        src={team.logo.url}
+        alt={`${team.name} logo`}
+        width={size}
+        height={size}
+        loading="lazy"
+        onError={() => setFailed(true)}
+        style={{ width: size, height: size }}
+        className={cn("shrink-0 overflow-hidden object-contain", className)}
+      />
+    );
   }
   const fg = readableOn(team.primary);
   const trim = trimColor(team);
@@ -131,9 +144,21 @@ export function PlayerPortrait({ player, size = 64, className }: { player: Pick<
   const team = player.team;
   const primary = team?.primary ?? "#2F7BFF";
   const secondary = team ? trimColor(team) : "#22D3EE";
-  if (player.portrait?.url) {
+  const [failed, setFailed] = useState(false);
+  if (player.portrait?.url && !failed) {
     // eslint-disable-next-line @next/next/no-img-element
-    return <img src={player.portrait.url} alt={player.name} width={size} height={size * 1.15} className={cn("rounded-xl object-cover", className)} />;
+    return (
+      <img
+        src={player.portrait.url}
+        alt={player.name}
+        width={size}
+        height={size * 1.15}
+        loading="lazy"
+        onError={() => setFailed(true)}
+        style={{ width: size, height: size * 1.15, background: `linear-gradient(160deg, ${primary}55, transparent)` }}
+        className={cn("shrink-0 overflow-hidden rounded-xl object-cover object-top", className)}
+      />
+    );
   }
   const jerseyText = readableOn(primary);
   const num = player.jersey ?? "";

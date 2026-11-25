@@ -1,13 +1,16 @@
-# Publishes a read-only static preview of the application to GitHub Pages (gh-pages branch).
-# The backend loads the committed demo dataset, trains the models, and renders every API
-# response the web app needs to JSON; the frontend is then built as a static site.
-name: Deploy preview to GitHub Pages
+# Publishes the static site to GitHub Pages (gh-pages branch).
+# The backend loads the committed real-data snapshot, brings it up to date from ESPN (scores,
+# DraftKings lines, box scores, injuries, rosters), trains the models, runs the walk-forward
+# backtest, archives forecasts for upcoming games and renders every API response the web app
+# needs to JSON; the frontend is then built as a static site. Live scores are refreshed in the
+# browser between builds.
+name: Deploy site to GitHub Pages
 
 on:
   push:
     branches: [main]
   schedule:
-    - cron: "17 9 * * *"   # daily rebuild so the demo slate and results stay current
+    - cron: "23 */2 * * *"   # every two hours: new results, lines, injuries and forecasts
   workflow_dispatch:
 
 permissions:
@@ -22,6 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       ENABLE_SCHEDULER: "false"
+      DATA_SOURCE: espn
       BASE: /${{ github.event.repository.name }}
     steps:
       - uses: actions/checkout@v4
@@ -34,6 +38,12 @@ jobs:
       - name: Install backend
         working-directory: backend
         run: pip install -r requirements.txt
+      - name: Restore ESPN response cache
+        uses: actions/cache@v4
+        with:
+          path: backend/data/espn_cache
+          key: espn-cache-${{ github.run_id }}
+          restore-keys: espn-cache-
       - name: Prepare data and models
         working-directory: backend
         run: python -m app.cli bootstrap

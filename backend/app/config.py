@@ -16,7 +16,16 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./courtside.db"
     redis_url: str | None = None
 
-    # Data providers (all optional; missing keys => clearly-labelled DEMO mode)
+    # Primary data source.
+    #   espn: real games, live scores, DraftKings lines, box scores, injuries and rosters from
+    #         ESPN's public site API (no key required)
+    #   demo: the committed synthetic dataset (offline development and the test suite)
+    data_source: str = "espn"
+    espn_seasons_nba: int = 3  # current season + two earlier seasons of history
+    espn_seasons_cbb: int = 2
+    espn_poll_seconds: int = 60
+
+    # Optional keyed providers (enrichment: player prop lines, extra books)
     balldontlie_api_key: str | None = None
     odds_api_key: str | None = None
     sportsdataio_api_key: str | None = None
@@ -52,7 +61,7 @@ class Settings(BaseSettings):
 
     @property
     def demo_mode(self) -> bool:
-        return not (self.balldontlie_api_key or self.odds_api_key or self.sportsdataio_api_key)
+        return self.data_source == "demo"
 
 
 @lru_cache

@@ -7,6 +7,7 @@ _tmp = tempfile.mkdtemp(prefix="courtside-test-")
 # Set TEST_DATABASE_URL (e.g. postgresql+psycopg://...) to run the suite against PostgreSQL + pgvector.
 os.environ["DATABASE_URL"] = os.environ.get("TEST_DATABASE_URL") or f"sqlite:///{_tmp}/test.db"
 os.environ["ENABLE_SCHEDULER"] = "false"
+os.environ["DATA_SOURCE"] = "demo"  # the suite runs offline on the synthetic dataset
 for k in ("BALLDONTLIE_API_KEY", "ODDS_API_KEY", "SPORTSDATAIO_API_KEY", "ANTHROPIC_API_KEY", "REDIS_URL", "ADMIN_TOKEN"):
     os.environ.pop(k, None)
 

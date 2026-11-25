@@ -26,7 +26,7 @@ log = logging.getLogger(__name__)
 
 DEFAULT_DIR = Path(__file__).resolve().parents[2] / "data" / "demo_snapshot"
 LOAD_TABLES = ["conferences", "teams", "sportsbooks", "players", "roster_memberships", "games", "team_game_stats",
-               "player_game_stats", "injuries", "odds_snapshots", "prop_lines", "demo_outcomes"]
+               "player_game_stats", "injuries", "odds_snapshots", "prop_lines", "demo_outcomes", "assets"]
 EXPORT_ONLY = ["predictions", "settlements", "model_versions"]
 SNAPSHOT_FORMAT = 1
 
@@ -49,7 +49,7 @@ def export(db: Session, out_dir: Path | str = DEFAULT_DIR, description: str = ""
             if isinstance(c.type, JSON) and not df.empty:
                 df[c.name] = df[c.name].map(lambda v: None if v is None else json.dumps(v, sort_keys=True, default=str))
             elif isinstance(c.type, DateTime) and not df.empty:
-                df[c.name] = df[c.name].map(lambda v: None if v is None else (v if v.tzinfo else v.replace(tzinfo=timezone.utc)).isoformat())
+                df[c.name] = df[c.name].map(lambda v: None if v is None or pd.isna(v) else (v if v.tzinfo else v.replace(tzinfo=timezone.utc)).isoformat())
         buf = io.StringIO()
         df.to_csv(buf, index=False)
         raw = buf.getvalue().encode()
@@ -71,7 +71,7 @@ def _coerce(df: pd.DataFrame, table) -> list[dict]:
             if k not in types:
                 continue
             t = types[k]
-            if v is None or (isinstance(v, float) and pd.isna(v)):
+            if v is None or (isinstance(v, float) and pd.isna(v)) or v == "NaT":
                 r[k] = None
             elif isinstance(t, JSON):
                 r[k] = json.loads(v) if isinstance(v, str) else v
@@ -105,7 +105,10 @@ def load(db: Session, src: Path | str = DEFAULT_DIR, verify: bool = True) -> dic
     db.commit()
     counts = {}
     for name in LOAD_TABLES:
-        meta = manifest["tables"][name]
+        meta = manifest["tables"].get(name)
+        if meta is None:  # table added after this snapshot was written
+            counts[name] = 0
+            continue
         raw = gzip.decompress((src / meta["file"]).read_bytes())
         if verify and hashlib.sha256(raw).hexdigest() != meta["sha256"]:
             raise ValueError(f"checksum mismatch for {meta['file']}")

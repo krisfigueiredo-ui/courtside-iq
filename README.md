@@ -6,9 +6,9 @@
 ![Next.js](https://img.shields.io/badge/Next.js-15-000000?logo=nextdotjs&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-pgvector-4169E1?logo=postgresql&logoColor=white)
 
-**Live preview: https://krisfigueiredo-ui.github.io/courtside-iq/**
+**Live site: https://krisfigueiredo-ui.github.io/courtside-iq/** (real games, rebuilt every two hours, live scores in the browser)
 
-Basketball analytics platform for the NBA and NCAA men's basketball. It combines a live scoreboard, league-specific machine-learning projections, Monte Carlo simulation, sportsbook market comparison, player prop distributions, a trends lab, a permanent prediction archive with automated grading, a data import and cleaning pipeline, and an AI research assistant that answers questions from the platform's own records.
+Basketball analytics platform for the NBA and NCAA Division I men's basketball, running on real data: schedules, live scores, final scores, team and player box scores, DraftKings opening and closing lines, the NBA injury report and NBA rosters from ESPN's public API. It combines a live scoreboard, league-specific machine-learning projections, Monte Carlo simulation, sportsbook market comparison, player prop distributions, a trends lab, a permanent prediction archive with automated grading, a data import and cleaning pipeline, and an AI research assistant that answers questions from the platform's own records.
 
 ![Command Center](docs/screenshots/command-center.png)
 
@@ -66,7 +66,7 @@ courtside-iq/
 │   ├── app/
 │   │   ├── models.py        SQLAlchemy schema (26 tables)
 │   │   ├── registry/        NBA franchises, NCAA schools and conferences, NBA seed roster
-│   │   ├── providers/       BALLDONTLIE and The Odds API clients, rate limiting, retries, sync
+│   │   ├── providers/       ESPN client and sync (default); BALLDONTLIE and The Odds API clients
 │   │   ├── ml/              Point-in-time features, game model, props model, simulator, metrics
 │   │   ├── services/        Modeling, market math, settlement, performance, trends, diagnostics
 │   │   ├── data_mgmt/       Import pipeline, exports, dataset snapshots
@@ -76,7 +76,8 @@ courtside-iq/
 │   │   ├── static_export.py Static preview data export
 │   │   └── cli.py           Operations CLI
 │   ├── alembic/             Database migrations
-│   ├── data/demo_snapshot/  Committed dataset (gzipped CSV + manifest)
+│   ├── data/espn_snapshot/  Committed real dataset (gzipped CSV + manifest)
+│   ├── data/demo_snapshot/  Synthetic dataset used by the test suite
 │   └── tests/               Backend test suite
 ├── frontend/                Next.js 15, TypeScript, Tailwind, Radix UI, Framer Motion, ECharts, TanStack
 ├── docs/                    Deployment guide, dataset reference, screenshots
@@ -95,9 +96,9 @@ courtside-iq/
 
 ## Getting started
 
-### Live preview
+### Live site
 
-A read-only build of the application is published to GitHub Pages on every push to `main` and once a day: https://krisfigueiredo-ui.github.io/courtside-iq/. It is generated from the committed dataset by `.github/workflows/pages.yml`. Features that write data (picks, imports, retraining) and the AI assistant require the full application.
+https://krisfigueiredo-ui.github.io/courtside-iq/ is rebuilt by `.github/workflows/pages.yml` on every push to `main` and every two hours. Each build restores the committed real-data snapshot, syncs everything since then from ESPN, retrains the models, re-runs the walk-forward backtest and freezes forecasts for upcoming games. Between builds the browser refreshes the score, period and clock of games in progress directly from ESPN. Features that write data (picks, imports, retraining) and the AI assistant require the full application.
 
 ### Docker
 
@@ -111,7 +112,7 @@ docker compose up --build
 - Web: http://localhost:3000
 - API documentation: http://localhost:8000/docs
 
-On first start the API loads the committed dataset, trains both leagues' models and builds the prediction archive. This takes about two minutes.
+On first start the API restores the committed real-data snapshot, syncs the days since it was taken from ESPN, trains both leagues' models and builds the prediction archive. This takes about two minutes. No API key is needed.
 
 ### Local development
 
@@ -133,54 +134,64 @@ Settings are read from environment variables (see `.env.example`). API keys are 
 |---|---|
 | `DATABASE_URL` | SQLAlchemy URL. Default `sqlite:///./courtside.db` |
 | `REDIS_URL` | Optional provider response cache |
-| `BALLDONTLIE_API_KEY` | Games, live scores, box scores, rosters, injuries |
-| `ODDS_API_KEY` | Sportsbook odds (The Odds API v4) |
+| `DATA_SOURCE` | `espn` (default): real data from ESPN's public API, no key. `demo`: the synthetic dataset |
+| `ESPN_SEASONS_NBA`, `ESPN_SEASONS_CBB` | Seasons of history to load on first run (default 3 and 2) |
+| `ESPN_POLL_SECONDS` | Live refresh interval for scores and lines (default 60) |
+| `BALLDONTLIE_API_KEY` | Optional alternative feed for games, box scores, rosters, injuries |
+| `ODDS_API_KEY` | Optional: player prop lines, first-half and team totals, more sportsbooks (The Odds API v4) |
 | `SPORTSDATAIO_API_KEY` | Health checks only; endpoint mapping depends on the subscription |
 | `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`, `AI_EFFORT` | COURTSIDE AI |
 | `LICENSED_LOGO_BASE_URL` | Base URL of a licensed logo CDN (`{slug}.svg`) |
 | `LIVE_POLL_SECONDS`, `ODDS_POLL_SECONDS` | Refresh cadence |
 | `MONTE_CARLO_SIMS`, `RANDOM_SEED` | Simulation size and reproducibility |
-| `USE_DEMO_SNAPSHOT` | Load the committed dataset in demo mode (default `true`) |
+| `USE_DEMO_SNAPSHOT` | With `DATA_SOURCE=demo`, load the committed synthetic dataset (default `true`) |
 | `ADMIN_TOKEN` | Protects retrain, tune, refresh and asset registration endpoints |
 | `MLFLOW_TRACKING_URI` | Optional experiment tracking |
 
-### Demo mode and live mode
+### Data sources
 
-Without provider keys the platform runs in demo mode. The interface shows a demo banner and `DEMO` labels, and every demo row carries `is_demo = true` in the database and in exports.
+With `DATA_SOURCE=espn` (the default) the scheduler:
 
-With keys configured, the scheduler:
-
-- syncs games and live scores
-- captures timestamped odds snapshots
-- pulls box scores for finished NBA games
-- refreshes the injury report every 30 minutes and records each upcoming game's injury impact
-- pulls first-half totals, team totals, alternate lines and player props for games starting within 12 hours
+- refreshes scores, game status and DraftKings lines for yesterday, today and tomorrow every minute, and the next seven days of schedule every hour
+- loads team and player box scores for each game as it goes final
+- refreshes the NBA injury report every 30 minutes and records each upcoming game's injury impact
+- verifies NBA rosters against ESPN every six hours
 - freezes pre-game forecasts and grades them after the final
+
+With `ODDS_API_KEY` set it also pulls first-half totals, team totals, alternate lines and player props for games starting within 12 hours.
+
+`DATA_SOURCE=demo` runs on a synthetic dataset instead. The interface then shows a demo banner and `DEMO` labels, and every demo row carries `is_demo = true`. The test suite uses this mode so it runs offline.
 
 ## Data
 
-The repository includes the complete demo dataset in `backend/data/demo_snapshot/`, as gzipped CSV files with a manifest of row counts and SHA-256 checksums:
+The repository includes a snapshot of the real dataset in `backend/data/espn_snapshot/`, as gzipped CSV files with a manifest of row counts and SHA-256 checksums (taken November 25, 2026):
 
 | Table | Rows |
 |---|---|
-| Games (four seasons per league plus the 2026-27 season) | 10,844 |
-| Team box scores | 17,778 |
-| Player game logs | 13,085 |
-| Odds snapshots (4 sportsbooks) | 146,190 |
-| Player prop lines | 9,800 |
-| Archived predictions (export only) | 7,714 |
+| Games: NBA 2024-25, 2025-26 and 2026-27 to date; Division I 2025-26 and 2026-27 to date | 10,119 |
+| Team box scores | 19,390 |
+| Player game logs (NBA) | 62,492 |
+| DraftKings line snapshots (spread, total, moneyline; opening and closing) | 83,044 |
+| Teams (30 NBA, 365 Division I) and conferences | 395 / 34 |
+| Players, verified roster memberships, injury reports | 766 / 538 / 101 |
+| Archived predictions (export only) | 4,156 |
 
-The demo dataset is produced by the project's league simulator (`backend/app/ml/synthetic.py`). It is synthetic: games, statistics and odds are not real. The team, school and conference registries are real, and the NBA seed roster lists 48 real players with their 2025-26 teams, flagged as unverified until a provider roster sync confirms them. No college players are included because college rosters change every season.
+Source: ESPN's public site API (`site.api.espn.com`), which needs no key but is unofficial and undocumented. Notes:
 
-`docs/DATA.md` documents the files and columns. To regenerate or reload the data:
+- Closing lines carry no timestamp. They are recorded five minutes before tip-off, opening lines 24 hours before.
+- ESPN has no lines for the 2024-25 NBA season or the first weeks of 2025-26, so those games are training data only.
+- Team logos and player headshots are linked from ESPN's image CDN, not bundled.
+
+`docs/DATA.md` documents the files and columns. To refresh or reload the data:
 
 ```bash
 cd backend
-python -m app.cli export-snapshot      # database -> backend/data/demo_snapshot
-python -m app.cli load-snapshot        # snapshot -> empty database
+python -m app.cli bootstrap            # sync from ESPN, train, backtest
+python -m app.cli export-snapshot      # database -> backend/data/espn_snapshot
+python -m app.cli load-snapshot --dir data/espn_snapshot   # snapshot -> empty database
 ```
 
-Real historical data can be imported through Data Management, after which the models are retrained on it (`python -m app.cli train --league NBA`).
+The synthetic dataset used by the test suite is in `backend/data/demo_snapshot/` (generated by `backend/app/ml/synthetic.py`). Other historical data can be imported through Data Management.
 
 ## Modeling
 
@@ -199,30 +210,38 @@ Games with a final score but no box score (score-only imports, feeds without box
 ### Game model
 
 1. A structural baseline: expected pace multiplied by opponent-adjusted points per possession.
-2. LightGBM and CatBoost regressors learn the residual on top of the baseline for margin, total and first-half total; the projection is their average. XGBoost is trained as a benchmark.
+2. LightGBM and CatBoost regressors learn the residual on top of the baseline for margin, total and first-half total; the projection is their average, scaled by a weight between 0 and 1 fit on the calibration fold (how much of the learned adjustment holds up out of sample). XGBoost is trained as a benchmark.
 3. Each game is simulated 10,000 times (configurable) from a bivariate normal distribution of margin and total, with spread and correlation estimated on an out-of-sample calibration fold. Scores are rounded to integers, ties go to simulated overtime, and seeds are fixed per game.
-4. Win probability is isotonic-calibrated. Cover, push and over/under probabilities come from the simulated outcomes, so any alternate line can be priced.
+4. Win probability is recalibrated with isotonic or Platt scaling only when that beats no recalibration on cross-validated Brier score by at least 0.002. Cover, push and over/under probabilities come from the simulated outcomes, so any alternate line can be priced.
 
 Spread and total probabilities use a market-informed mean: `w * model + (1 - w) * market line`. The weight `w` is fit on the calibration fold. The pure model projection is still the line shown against the sportsbook.
 
 ### Validation
 
-- Chronological split: 70% train, 15% calibration, 15% test
+- Earlier seasons train the model; the current season is a walk-forward backtest. Each current-season forecast is frozen at tip-off and graded against the DraftKings closing line
+- Within the training seasons, a chronological split: 70% train, 15% calibration, 15% test
 - Four expanding-window walk-forward folds
 - A season-by-season backtest: train on every earlier season, test on the next
 - Metrics: MAE, RMSE, Brier score, log loss, expected calibration error, hit rate with Wilson intervals
 - Hyperparameter search with Optuna on a chronological validation fold
 
-### Results on the demo dataset
+### Results on real games
 
-Held-out test fold:
+Held-out test fold (the last 15% of the training seasons):
 
-| League | Games | Margin MAE (ensemble / XGBoost / baseline) | Total MAE (ensemble / XGBoost / baseline) | Win Brier |
+| League | Test games | Margin MAE (ensemble / XGBoost / baseline) | Total MAE (ensemble / XGBoost / baseline) | Win Brier |
 |---|---|---|---|---|
-| NBA | 689 | 14.15 / 14.41 / 14.34 | 14.47 / 14.99 / 14.57 | 0.222 |
-| CBB | 485 | 11.09 / 11.33 / 11.24 | 11.88 / 12.24 / 11.94 | 0.223 |
+| NBA | 383 | 11.93 / 12.59 / 11.77 | 15.03 / 15.50 / 15.30 | 0.172 |
+| CBB | 767 | 9.19 / 9.48 / 9.22 | 13.57 / 13.94 / 14.37 | 0.196 |
 
-The simulated sportsbook market is efficient, so the fitted market weight for NBA spreads and totals is close to zero: the model adds little information beyond the closing line on this dataset. These figures describe the simulator; performance on real games has to be measured after importing real history.
+2026-27 season to date, walk-forward and graded against DraftKings closing lines (snapshot of November 25, 2026):
+
+| League | Games | Moneyline | Spread | Total |
+|---|---|---|---|---|
+| NBA | 261 | 183-78 (70.1%) | 133-128 (51.0%) | 130-131 (49.8%) |
+| CBB | 1,071 | 815-257 (76.0%) | 534-537 (49.9%) | 598-473 (55.8%) |
+
+The closing line is hard to beat. Against the spread, both leagues are at coin-flip level, and the fitted market weight for NBA spreads and totals is zero: the model adds no information beyond the NBA closing line. The tree ensemble improves college totals clearly over the efficiency baseline, and college totals are 55.8% over 1,071 games, with overs and unders hitting at similar rates while games split 50.5% under. That is one month of one season, so treat it as a lead to keep testing, not a proven edge. The live site recomputes these figures on every build.
 
 ### Player props
 
@@ -230,7 +249,7 @@ The simulated sportsbook market is efficient, so the fitted market weight for NB
 2. Opportunity: per-minute production rates, shrunk toward the season rate and adjusted for pace and opponent defense.
 3. Outcomes: Negative Binomial simulations that share a game-flow multiplier, so points, assists and threes are positively correlated. PRA is summed per simulation.
 
-When a sportsbook line exists, the mean is anchored to it with a per-stat weight. The weight is fit on the oldest 70% of settled prop forecasts and checked on the newest 30%. It is adopted only when it beats the default weight of 0.5 on that holdout, and it applies to new forecasts only.
+ESPN does not publish player prop lines, so props are shown as projections and distributions unless The Odds API is connected. When a sportsbook line exists, the mean is anchored to it with a per-stat weight. The weight is fit on the oldest 70% of settled prop forecasts and checked on the newest 30%. It is adopted only when it beats the default weight of 0.5 on that holdout, and it applies to new forecasts only.
 
 ## Prediction archive and grading
 
@@ -288,7 +307,8 @@ The backend suite covers:
 - feature leakage
 - training, benchmarks and simulation reproducibility
 - the prediction archive and the props model
-- provider sync (with recorded payloads), live-mode enrichment, alternate lines and version comparison
+- ESPN mapping on recorded payloads (scores, box scores, closing lines, Division I filtering, injuries) and other provider syncs
+- live-mode enrichment, alternate lines and version comparison
 - the import pipeline, exports and dataset snapshots
 - the AI tool loop (with a mocked client)
 - the API
@@ -297,7 +317,7 @@ GitHub Actions runs the backend on SQLite and PostgreSQL, the frontend type chec
 
 ## Deployment
 
-See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). To build the static preview locally:
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). To build the static site locally:
 
 ```bash
 cd backend && python -m app.cli bootstrap && python -m app.cli export-static --out ../frontend/public/data
@@ -306,7 +326,10 @@ cd ../frontend && STATIC_EXPORT=1 NEXT_PUBLIC_STATIC=1 npm run build    # output
 
 ## Limitations
 
-- Live scores, odds, injuries and prop lines require BALLDONTLIE and The Odds API subscriptions. NCAA live data requires a BALLDONTLIE plan with NCAAB access. Provider field mappings are covered by tests on representative payloads and should be confirmed against live responses when keys are added.
-- Official NBA and NCAA logos and player likenesses are not bundled because they require licenses. Teams display original crests in their colors, and players display a uniform-and-number illustration. Licensed assets can be registered in Settings or served from `LICENSED_LOGO_BASE_URL`.
-- Shot charts require shot coordinates, which the integrated feeds do not provide on standard plans.
+- ESPN's site API is public but unofficial: it has no published terms for this use, field names can change without notice, and closing lines are not timestamped. The sync is defensive and covered by tests on recorded payloads.
+- ESPN provides DraftKings lines only. Player prop lines, first-half and team totals, alternate lines and other sportsbooks need The Odds API.
+- College player box scores are not loaded; college props are not modeled.
+- Historical injury reports are not available, so the injury features only affect upcoming games.
+- Team logos and player headshots are trademarks and likenesses of their owners. They are linked from ESPN's CDN for identification and are not bundled; if an image fails to load, an original crest or illustration is shown.
+- Shot charts require shot coordinates, which the integrated feeds do not provide.
 - Authentication is limited to an admin token for mutating endpoints. Multi-user deployments should run behind an identity-aware proxy.

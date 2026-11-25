@@ -3,8 +3,8 @@
 Primary: LightGBM + CatBoost regressors (averaged) for margin, total and first-half total.
 Benchmark: XGBoost (same targets), reported but never served.
 Probabilities: Monte Carlo over a bivariate normal on (margin, total) whose covariance is
-estimated from out-of-sample residuals, then win probability is isotonic-calibrated on a
-held-out chronological calibration fold.
+estimated from out-of-sample residuals, then win probability is recalibrated (isotonic, Platt or
+none, chosen by cross-validated Brier score) on a held-out chronological calibration fold.
 Validation: strict chronological split + rolling walk-forward folds.
 """
 from __future__ import annotations
@@ -61,7 +61,7 @@ class GameModelBundle:
     sigma_total: float
     rho: float
     sigma_h1: float
-    calibrator: IsotonicRegression | None
+    calibrator: object | None  # IsotonicRegression or PlattCalibrator (both expose .predict)
     metrics: dict
     trained_at: str
     data_source: str
@@ -206,7 +206,16 @@ def _fit_pair(X, y, seed, tgt):
 
 
 def _pred_pair(ms, X, tgt):
-    return X[BASELINE[tgt]].values + (ms["lgb"].predict(X) + ms["cat"].predict(X)) / 2
+    return X[BASELINE[tgt]].values + ms.get("alpha", 1.0) * (ms["lgb"].predict(X) + ms["cat"].predict(X)) / 2
+
+
+def _fit_shrinkage(ms, X, y, tgt) -> float:
+    """Least-squares weight in [0, 1] on the learned residual, fit out of sample (calibration
+    fold): 0 keeps the structural baseline, 1 trusts the trees fully."""
+    r_hat = (ms["lgb"].predict(X) + ms["cat"].predict(X)) / 2
+    r = np.asarray(y) - X[BASELINE[tgt]].values
+    den = float(np.sum(r_hat * r_hat))
+    return float(np.clip(np.sum(r_hat * r) / den, 0.0, 1.0)) if den > 0 else 0.0
 
 
 def walk_forward(df: pd.DataFrame, feats: list[str], n_folds: int = 4, seed: int = 0) -> list[dict]:
@@ -259,6 +268,60 @@ def season_backtest(df: pd.DataFrame, feats: list[str], seed: int = 0) -> list[d
     return out
 
 
+class PlattCalibrator:
+    """Logistic recalibration of a probability: sigmoid(a * logit(p) + b)."""
+
+    def __init__(self, a: float, b: float):
+        self.a, self.b = a, b
+
+    def predict(self, p) -> np.ndarray:
+        p = np.clip(np.asarray(p, dtype=float), 1e-4, 1 - 1e-4)
+        z = self.a * np.log(p / (1 - p)) + self.b
+        return np.clip(1 / (1 + np.exp(-z)), 0.01, 0.99)
+
+
+def _fit_platt(p: np.ndarray, y: np.ndarray) -> PlattCalibrator:
+    from sklearn.linear_model import LogisticRegression
+
+    pc = np.clip(p, 1e-4, 1 - 1e-4)
+    x = np.log(pc / (1 - pc)).reshape(-1, 1)
+    lr = LogisticRegression(C=1e6).fit(x, y)
+    return PlattCalibrator(float(lr.coef_[0][0]), float(lr.intercept_[0]))
+
+
+def _fit_iso(p: np.ndarray, y: np.ndarray) -> IsotonicRegression:
+    return IsotonicRegression(out_of_bounds="clip", y_min=0.01, y_max=0.99).fit(p, y)
+
+
+MIN_CALIBRATION_GAIN = 0.002  # cross-validated Brier improvement required to recalibrate
+
+
+def choose_calibrator(p: np.ndarray, y: np.ndarray, folds: int = 5):
+    """Pick none / Platt / isotonic by chronological cross-validated Brier score on the calibration
+    fold, then refit the winner on the whole fold. Isotonic steps overfit small samples, so it is
+    used only when it actually helps out of sample."""
+    p, y = np.asarray(p, dtype=float), np.asarray(y, dtype=float)
+    if len(p) < 100 or len(np.unique(y)) < 2:
+        return None, dict(method="none", reason="calibration fold too small")
+    idx = np.array_split(np.arange(len(p)), folds)
+    scores = {"none": [], "platt": [], "isotonic": []}
+    for k in range(folds):
+        te, tr = idx[k], np.concatenate([idx[j] for j in range(folds) if j != k])
+        if len(np.unique(y[tr])) < 2:
+            continue
+        scores["none"].append(np.mean((p[te] - y[te]) ** 2))
+        scores["platt"].append(np.mean((_fit_platt(p[tr], y[tr]).predict(p[te]) - y[te]) ** 2))
+        scores["isotonic"].append(np.mean((np.clip(_fit_iso(p[tr], y[tr]).predict(p[te]), 0.01, 0.99) - y[te]) ** 2))
+    cv = {k: float(np.mean(v)) for k, v in scores.items() if v}
+    best = min(cv, key=cv.get)
+    # a recalibration must earn its place: a negligible gain on a few hundred games mostly fits noise
+    # (e.g. a home/away intercept) and would show up as spurious edges against the market
+    if best != "none" and cv["none"] - cv[best] < MIN_CALIBRATION_GAIN:
+        best = "none"
+    model = None if best == "none" else (_fit_platt(p, y) if best == "platt" else _fit_iso(p, y))
+    return model, dict(method=best, cv_brier=cv, min_gain=MIN_CALIBRATION_GAIN)
+
+
 def train_game_model(df: pd.DataFrame, league: str, data_source: str, seed: int = 7,
                      lgb_overrides: dict | None = None) -> GameModelBundle:
     """df: output of build_features joined with start_time; must contain targets."""
@@ -282,6 +345,10 @@ def train_game_model(df: pd.DataFrame, league: str, data_source: str, seed: int 
     h1 = tr.dropna(subset=["y_h1_total"])
     models["h1_total"] = _fit_pair(h1[feats], h1["y_h1_total"], seed, "h1_total")
 
+    # how much of the learned residual to keep (fit on the calibration fold)
+    for tgt, ycol in (("margin", "y_margin"), ("total", "y_total"), ("h1_total", "y_h1_total")):
+        cc = cal.dropna(subset=[ycol])
+        models[tgt]["alpha"] = _fit_shrinkage(models[tgt], cc[feats], cc[ycol].values, tgt) if len(cc) >= 50 else 1.0
     # residual structure from calibration fold (out of sample)
     rm = cal["y_margin"].values - _pred_pair(models["margin"], cal[feats], "margin")
     rt = cal["y_total"].values - _pred_pair(models["total"], cal[feats], "total")
@@ -298,14 +365,21 @@ def train_game_model(df: pd.DataFrame, league: str, data_source: str, seed: int 
         mu_cal = np.where(has, blend["w_margin"] * mu_cal + (1 - blend["w_margin"]) * (-cal["mkt_spread_home"].fillna(0).values), mu_cal)
         sd_cal = np.where(has, blend["sigma_margin"], sm)
     p_cal_raw = norm.cdf(mu_cal / sd_cal)
-    iso = IsotonicRegression(out_of_bounds="clip", y_min=0.01, y_max=0.99).fit(p_cal_raw, cal["y_home_win"].values)
+    iso, calib_choice = choose_calibrator(p_cal_raw, cal["y_home_win"].values)
 
     # ---- held-out test evaluation (never used for fitting) ----
     pm, pt = _pred_pair(models["margin"], te[feats], "margin"), _pred_pair(models["total"], te[feats], "total")
     teh = te.dropna(subset=["y_h1_total"])
     ph = _pred_pair(models["h1_total"], teh[feats], "h1_total")
-    p_raw = norm.cdf(pm / sm)
-    p_cal = np.clip(iso.predict(p_raw), 0.01, 0.99)
+    p_model = norm.cdf(pm / sm)
+    # the calibrator is applied to the same (market-informed when a line exists) probability it was fit on
+    mu_te, sd_te = pm, np.full(len(te), sm)
+    if blend and "mkt_spread_home" in te:
+        has_te = te["mkt_spread_home"].notna().values
+        mu_te = np.where(has_te, blend["w_margin"] * pm + (1 - blend["w_margin"]) * (-te["mkt_spread_home"].fillna(0).values), pm)
+        sd_te = np.where(has_te, blend["sigma_margin"], sm)
+    p_raw = norm.cdf(mu_te / sd_te)
+    p_cal = np.clip(iso.predict(p_raw), 0.01, 0.99) if iso is not None else p_raw
     y_win = te["y_home_win"].values
     # benchmark: XGBoost
     xm = _xgb(seed).fit(tr[feats], tr["y_margin"]).predict(te[feats])
@@ -320,8 +394,10 @@ def train_game_model(df: pd.DataFrame, league: str, data_source: str, seed: int 
             margin=M.regression_metrics(pm, te["y_margin"].values),
             total=M.regression_metrics(pt, te["y_total"].values),
             h1_total=M.regression_metrics(ph, teh["y_h1_total"].values),
+            win_model_only=M.classification_metrics(p_model, y_win),
             win_raw=M.classification_metrics(p_raw, y_win),
             win_calibrated=M.classification_metrics(p_cal, y_win),
+            calibration_method=calib_choice,
             reliability=M.reliability(p_cal, y_win),
         ),
         benchmarks=dict(
@@ -331,6 +407,7 @@ def train_game_model(df: pd.DataFrame, league: str, data_source: str, seed: int 
                                   total=M.regression_metrics(te["naive_total"].values, te["y_total"].values)),
         ),
         residuals=dict(sigma_margin=sm, sigma_total=st, sigma_h1=sh, rho=rho),
+        residual_shrinkage={tgt: models[tgt]["alpha"] for tgt in models},
         market_blend=dict(fit=blend, test=_blend_eval(te, pm, pt, sm, st, blend)),
         walk_forward=walk_forward(df, feats, seed=seed),
         by_season=season_backtest(df, feats, seed=seed),

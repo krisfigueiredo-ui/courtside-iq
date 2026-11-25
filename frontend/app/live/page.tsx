@@ -161,7 +161,7 @@ function LiveDetail({ r }: { r: BoardRow & { live?: any } }) {
         <PanelHeader eyebrow="Market" title="Pre-game line movement (spread)" />
         <div className="p-2">{d.data?.movement?.n ? <LineMovementChart series={d.data.movement.series} market="spreads" height={300} /> : <Skeleton className="h-64" />}</div>
         <div className="px-4 pb-3 text-[11px] text-mist-500">
-          In-game lines are only shown when the connected odds feed supplies live markets; the demo feed captures pre-game snapshots only. <StatusPill g={g} />
+          In-game lines are only shown when a connected odds feed supplies live markets; ESPN provides pre-game opening and closing lines. <StatusPill g={g} />
         </div>
       </Panel>
     </div>

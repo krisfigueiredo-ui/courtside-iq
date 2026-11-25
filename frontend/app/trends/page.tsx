@@ -490,7 +490,7 @@ function FeatureView() {
                   xAxis: { type: "category", data: corr.data.columns.map(featureShort), ...baseAxis, axisLabel: { ...baseAxis.axisLabel, rotate: 45 } },
                   yAxis: { type: "category", data: corr.data.columns.map(featureShort), ...baseAxis },
                   visualMap: { show: false, min: -1, max: 1, inRange: { color: ["#F43F5E", "#0A1222", "#2F7BFF"] } },
-                  series: [{ type: "heatmap", data: corr.data.matrix.flatMap((row: number[], i: number) => row.map((v, j) => [j, i, v])), label: { show: true, fontSize: 8.5, color: "#E6EDF7" } }],
+                  series: [{ type: "heatmap", data: corr.data.matrix.flatMap((row: (number | null)[], i: number) => row.map((v, j) => [j, i, v ?? "-"])), label: { show: true, fontSize: 8.5, color: "#E6EDF7" } }],
                 }}
               />
             ) : (

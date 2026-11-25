@@ -1,5 +1,5 @@
 # COURTSIDE IQ full stack: `cp .env.example .env`, then `docker compose up --build`.
-# Without provider keys the stack starts in clearly-labelled DEMO mode.
+# Real NBA and college data from ESPN by default (no key). DATA_SOURCE=demo runs the synthetic dataset.
 services:
   db:
     image: pgvector/pgvector:pg16

@@ -58,7 +58,7 @@ export default function PropsLab() {
       {q.isLoading && <Skeleton className="h-96" />}
       {!q.isLoading && all.length === 0 && (
         <Panel>
-          <Empty title="No player projections in the next 30 hours">Projections require player game logs from a connected provider (or the demo dataset) and an active props model.</Empty>
+          <Empty title="No player projections in the next 30 hours">Projections require player game logs (ESPN box scores) and an active props model. Sportsbook prop lines appear when The Odds API is connected.</Empty>
         </Panel>
       )}
       {selected && (

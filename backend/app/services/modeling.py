@@ -29,7 +29,24 @@ def _data_source(df: pd.DataFrame) -> str:
     return "mixed" if "is_historical_sim" in df and df["is_historical_sim"].any() else "real"
 
 
+_logs_cache: dict[str, tuple[int, pd.DataFrame]] = {}
+
+
 def player_logs(db: Session, league: str) -> pd.DataFrame:
+    """All player box-score rows for a league (cached until new rows arrive)."""
+    from sqlalchemy import func
+
+    n = db.scalar(select(func.count(m.PlayerGameStat.id)).join(m.Game, m.Game.id == m.PlayerGameStat.game_id)
+                  .where(m.Game.league == league)) or 0
+    hit = _logs_cache.get(league)
+    if hit and hit[0] == n:
+        return hit[1]
+    df = _player_logs(db, league)
+    _logs_cache[league] = (n, df)
+    return df
+
+
+def _player_logs(db: Session, league: str) -> pd.DataFrame:
     q = (select(m.PlayerGameStat, m.Game.start_time, m.Game.home_team_id, m.Game.season)
          .join(m.Game, m.Game.id == m.PlayerGameStat.game_id).where(m.Game.league == league))
     rows = []
@@ -51,7 +68,13 @@ def train_league(db: Session, league: str, cutoff: datetime | None = None) -> di
         raise ValueError(f"no {league} games available")
     if cutoff is None:
         cur = ff[~ff["is_historical_sim"]]
-        cutoff = cur["start_time"].min() if not cur.empty and ff["is_historical_sim"].any() else ff["start_time"].max()
+        if not cur.empty and ff["is_historical_sim"].any():
+            cutoff = cur["start_time"].min()  # demo: synthetic history trains, the real-calendar season is tested
+        elif ff["season"].nunique() > 1:
+            latest = sorted(ff["season"].unique())[-1]
+            cutoff = ff.loc[ff["season"] == latest, "start_time"].min()  # earlier seasons train, current season is tested
+        else:
+            cutoff = ff["start_time"].max()
     train_df = ff[(ff["start_time"] < pd.Timestamp(cutoff)) & ff["y_margin"].notna()]
     src = _data_source(train_df)
     gb = GM.train_game_model(train_df, league, src)
@@ -234,7 +257,8 @@ def market_comparison(proj: dict, cons: dict) -> dict:
     return res
 
 
-def project_props(db: Session, game: m.Game, as_of: datetime | None = None, n_sims: int = 10000) -> list[dict]:
+def project_props(db: Session, game: m.Game, as_of: datetime | None = None, n_sims: int = 10000,
+                  only: set[int] | None = None) -> list[dict]:
     mv = active_version(db, game.league, "props")
     if mv is None:
         return []
@@ -250,12 +274,24 @@ def project_props(db: Session, game: m.Game, as_of: datetime | None = None, n_si
         return []
     start = pd.Timestamp(game.start_time) if game.start_time.tzinfo else pd.Timestamp(game.start_time).tz_localize("UTC")
     hist = logs[logs["start_time"] < start]
-    members = db.execute(select(m.RosterMembership).where(m.RosterMembership.team_id.in_([game.home_team_id, game.away_team_id]),
-                                                          m.RosterMembership.end_date.is_(None))).scalars().all()
+    if game.status == "scheduled":
+        members = db.execute(select(m.RosterMembership).where(m.RosterMembership.team_id.in_([game.home_team_id, game.away_team_id]),
+                                                              m.RosterMembership.end_date.is_(None))).scalars().all()
+    else:
+        # past games (backtests): players who appeared for the team in its three previous games,
+        # which is knowable before tip-off, rather than today's rosters
+        members = []
+        for tid in (game.home_team_id, game.away_team_id):
+            th = hist[hist["team_id"] == tid]
+            recent = th.drop_duplicates("game_id").nlargest(3, "start_time")["game_id"]
+            for pid in sorted(set(th[th["game_id"].isin(recent)]["player_id"])):
+                members.append(m.RosterMembership(player_id=int(pid), team_id=tid, season=game.season, source="box_scores"))
     lines = market.prop_lines(db, game.id, as_of=as_of)
     prop_weights = ((mv.params or {}).get("prop_blend") or {}).get("weights") or PM.PROP_MODEL_WEIGHT
     out = []
     for rm in members:
+        if only is not None and rm.player_id not in only:
+            continue
         ph = hist[hist["player_id"] == rm.player_id]
         if ph.empty:
             continue
@@ -409,7 +445,7 @@ def archive_game_predictions(db: Session, game: m.Game, as_of: datetime | None =
                                  predicted_prob=t[f"p_{sel}"], line=t["line"], details=dict(mode=mode, p_push=t["p_push"])))
     # props
     pmv = active_version(db, game.league, "props")
-    if pmv:
+    if pmv and market.prop_lines(db, game.id, as_of=as_of):  # props are archived only against a posted line
         for pp in project_props(db, game, as_of=as_of, n_sims=4000):
             if pp["injury_out"]:
                 continue
@@ -439,17 +475,25 @@ def _norm_cdf(z: float) -> float:
 def backfill_current_season(db: Session, league: str, max_games: int | None = None) -> int:
     """Walk-forward backtest over completed current-season games using only pre-game data.
 
-    The model was trained with a cutoff at the season start, team features are point-in-time,
-    and market inputs are restricted to snapshots captured >= 1 hour before tip-off.
+    The model was trained with a cutoff at the season start and team features are point-in-time.
+    Market inputs are restricted to snapshots captured before the forecast instant: one hour
+    before tip-off for the demo feed, and just before tip-off for real games, where the
+    forecast is graded against the sportsbook's closing line.
     """
-    games = db.scalars(select(m.Game).where(m.Game.league == league, m.Game.is_historical_sim.is_(False),
-                                            m.Game.status == "final").order_by(m.Game.start_time)).all()
+    q = select(m.Game).where(m.Game.league == league, m.Game.is_historical_sim.is_(False), m.Game.status == "final")
+    mv = active_version(db, league)
+    if mv is not None and not (mv.data_source or "").startswith("synthetic"):
+        # real data: only games after the training cutoff (the current season) are out of sample
+        latest = db.scalar(select(m.Game.season).where(m.Game.league == league).order_by(m.Game.season.desc()).limit(1))
+        q = q.where(m.Game.season == latest)
+    games = db.scalars(q.order_by(m.Game.start_time)).all()
     done = {gid for (gid,) in db.execute(select(m.Prediction.game_id).distinct())}
     n = 0
     for g in games:
         if g.id in done:
             continue
-        rows = archive_game_predictions(db, g, as_of=_aware(g.start_time) - timedelta(hours=1), mode="backtest")
+        lead = timedelta(hours=1) if g.is_demo else timedelta(minutes=2)
+        rows = archive_game_predictions(db, g, as_of=_aware(g.start_time) - lead, mode="backtest")
         n += len(rows)
         if max_games and n >= max_games:
             break

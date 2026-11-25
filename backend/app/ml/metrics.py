@@ -54,7 +54,9 @@ def regression_metrics(pred: np.ndarray, y: np.ndarray) -> dict:
 
 def classification_metrics(p: np.ndarray, y: np.ndarray) -> dict:
     p, y = np.asarray(p, float), np.asarray(y, float)
-    hits = int(((p >= 0.5) == (y == 1)).sum())
-    lo, hi = wilson_interval(hits, len(y))
-    return dict(brier=brier(p, y), log_loss=log_loss(p, y), ece=ece(p, y), hit_rate=hits / max(1, len(y)),
-                hit_rate_ci=[lo, hi], n=int(len(y)))
+    decided = np.abs(p - 0.5) > 1e-9  # an exact 50/50 forecast makes no pick
+    hits = int(((p[decided] > 0.5) == (y[decided] == 1)).sum())
+    nd = int(decided.sum())
+    lo, hi = wilson_interval(hits, nd)
+    return dict(brier=brier(p, y), log_loss=log_loss(p, y), ece=ece(p, y), hit_rate=hits / max(1, nd),
+                hit_rate_ci=[lo, hi], n=int(len(y)), n_picks=nd)

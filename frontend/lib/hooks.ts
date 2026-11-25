@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
 import { API_BASE, STATIC, api } from "./api";
+import { hasLiveGames } from "./espn-live";
 import type { Game } from "./types";
 
 export interface TickerPayload {
@@ -36,7 +37,7 @@ export function useTicker(league?: string) {
   const poll = useQuery<TickerPayload>({
     queryKey: ["ticker", league],
     queryFn: () => api(`/api/ticker${qs}`),
-    refetchInterval: STATIC || sseOk ? false : 20_000,
+    refetchInterval: sseOk ? false : STATIC ? (q: any) => (hasLiveGames(q.state.data) ? 30_000 : false) : 20_000,
   });
   return { data: sseOk && sse ? sse : poll.data, transport: STATIC ? "snapshot" : sseOk ? "stream" : "polling", isLoading: !sse && poll.isLoading };
 }

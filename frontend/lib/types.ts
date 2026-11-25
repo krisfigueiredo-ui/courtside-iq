@@ -54,6 +54,7 @@ export interface Game {
   neutral: boolean;
   is_demo: boolean;
   source: string;
+  espn_id?: string | null;
   updated_at: string;
   model?: { win_prob_home: number | null; projected_margin: number | null };
 }

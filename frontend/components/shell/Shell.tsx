@@ -143,13 +143,24 @@ function TopBar({ onMenu, onAI }: { onMenu: () => void; onAI: () => void }) {
       </div>
       <div className="flex items-center gap-3">
         {STATIC ? (
-          <a
-            href={REPO_URL}
-            className="hidden rounded-md border border-flare/30 bg-flare/10 px-2 py-1 text-[10.5px] font-semibold text-flare hover:bg-flare/20 md:inline"
-            title="Read-only preview built from the repository's demo dataset. Run the application for live updates, the AI assistant, imports and picks."
-          >
-            STATIC PREVIEW · demo data as of {data?.server_time ? new Date(data.server_time).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" }) : "…"} · view source
-          </a>
+          data?.demo ? (
+            <a
+              href={REPO_URL}
+              className="hidden rounded-md border border-flare/30 bg-flare/10 px-2 py-1 text-[10.5px] font-semibold text-flare hover:bg-flare/20 md:inline"
+              title="Read-only preview built from the repository's demo dataset. Run the application for live updates, the AI assistant, imports and picks."
+            >
+              STATIC PREVIEW · demo data as of {data?.server_time ? new Date(data.server_time).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" }) : "…"} · view source
+            </a>
+          ) : (
+            <a
+              href={REPO_URL}
+              className="hidden rounded-md border border-gain/30 bg-gain/10 px-2 py-1 text-[10.5px] font-semibold text-gain hover:bg-gain/20 md:inline"
+              title="Real NBA and college games, DraftKings lines and box scores from ESPN. Forecasts and backtests are rebuilt on a schedule; scores of games in progress refresh in your browser."
+            >
+              LIVE DATA · ESPN · forecasts built{" "}
+              {data?.server_time ? new Date(data.server_time).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "…"} · live scores in-browser
+            </a>
+          )
         ) : (
           data?.demo && (
             <span className="hidden rounded-md border border-flare/30 bg-flare/10 px-2 py-1 text-[10.5px] font-semibold text-flare md:inline">

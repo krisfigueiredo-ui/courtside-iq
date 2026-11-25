@@ -63,15 +63,21 @@ def status(db: Session = Depends(get_db)):
                                                          "sportsdataio": "sportsdataio_api_key"}[prov])),
                             last_check=iso(h.checked_at) if h else None, ok=h.ok if h else None, message=h.message if h else None,
                             latency_ms=h.latency_ms if h else None, rate_limit_remaining=h.rate_limit_remaining if h else None)
+    if s.data_source == "espn":
+        last_sync = db.scalar(select(func.max(m.Game.updated_at)).where(m.Game.source == "espn"))
+        health = {"espn": dict(configured=True, last_check=iso(last_sync), ok=last_sync is not None,
+                               message="ESPN public site API: scores, DraftKings lines, box scores, injuries, rosters",
+                               latency_ms=None, rate_limit_remaining=None), **health}
     last_odds = db.scalar(select(func.max(m.OddsSnapshot.captured_at)))
     last_game = db.scalar(select(func.max(m.Game.updated_at)))
     models = [dict(league=mv.league, name=mv.name, version=mv.version, data_source=mv.data_source, trained_at=iso(mv.trained_at))
               for mv in db.scalars(select(m.ModelVersion).where(m.ModelVersion.is_active.is_(True)))]
-    return dict(mode="demo" if s.demo_mode else "live", demo=s.demo_mode, providers=health, ai_enabled=assistant.available(),
+    return dict(mode="demo" if s.demo_mode else "live", demo=s.demo_mode, data_source=s.data_source, providers=health, ai_enabled=assistant.available(),
                 ai_model=s.anthropic_model if assistant.available() else None, cache_backend=cache().backend,
                 database=db.bind.dialect.name, freshness=dict(odds=iso(last_odds), games=iso(last_game)), models=models,
                 server_time=iso(_now()), refresh=dict(live_seconds=s.live_poll_seconds, odds_seconds=s.odds_poll_seconds),
-                logos=("licensed CDN" if s.licensed_logo_base_url else "original crest renderer (no licensed logo source configured)"))
+                logos=("ESPN CDN (team logos, player headshots)" if s.data_source == "espn"
+                       else "licensed CDN" if s.licensed_logo_base_url else "original crest renderer (no licensed logo source configured)"))
 
 
 # ---------------- registry ----------------
@@ -131,7 +137,7 @@ def player_detail(player_id: int, db: Session = Depends(get_db)):
                                            m.Game.is_historical_sim.is_(False)).order_by(m.Game.start_time))
         if g:
             nxt = game_out(db, g)
-            proj = next((x for x in modeling.project_props(db, g, n_sims=6000) if x["player_id"] == player_id), None)
+            proj = next((x for x in modeling.project_props(db, g, n_sims=6000, only={player_id}) if x["player_id"] == player_id), None)
     inj = db.scalar(select(m.Injury).where(m.Injury.player_id == player_id, m.Injury.cleared_at.is_(None)).order_by(m.Injury.reported_at.desc()))
     return _clean(dict(player=po, trends=tr, next_game=nxt, projection=proj,
                        injury=dict(status=inj.status, description=inj.description, reported_at=iso(inj.reported_at), source=inj.source) if inj else None))
@@ -354,7 +360,9 @@ def correlations(league: str, db: Session = Depends(get_db)):
         ff = modeling.features_cache.get(db, league.upper()).dropna(subset=["y_margin"]).tail(800)
     cols = ["net_diff", "exp_pace", "h_rest", "a_rest", "h_travel", "a_travel", "h_injury", "a_injury", "naive_margin", "naive_total", "y_margin", "y_total"]
     c = ff[cols].corr().round(3)
-    return dict(columns=cols, matrix=c.values.tolist(), n=int(len(ff)))
+    # a constant column (e.g. no injury reports in the sample) has no defined correlation
+    matrix = [[None if x != x else float(x) for x in row] for row in c.values.tolist()]
+    return dict(columns=cols, matrix=matrix, n=int(len(ff)))
 
 
 # ---------------- predictions & performance ----------------
