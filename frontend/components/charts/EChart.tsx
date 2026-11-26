@@ -19,7 +19,9 @@ export function token(name: string, alpha = 1): string {
     const s = getComputedStyle(document.documentElement).getPropertyValue(`--c-${name}`).trim();
     if (s) v = s;
   }
-  return alpha === 1 ? `rgb(${v})` : `rgb(${v} / ${alpha})`;
+  // comma syntax: ECharts parses it for colour interpolation (heatmaps, visual maps, gradients)
+  const [r, g, b] = v.split(/[\s,]+/).map(Number);
+  return alpha === 1 ? `rgb(${r}, ${g}, ${b})` : `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
 /** Palette resolved for the current theme. Recomputed when the theme changes. */
@@ -81,6 +83,7 @@ export function EChart({
   className,
   onEvents,
   zoom,
+  range,
 }: {
   option: EChartsOption;
   height?: number | string;
@@ -88,6 +91,8 @@ export function EChart({
   onEvents?: Record<string, (p: any) => void>;
   /** adds inside (wheel/drag) zoom on the x axis */
   zoom?: boolean;
+  /** adds a range slider under the x axis (date-range selection) plus wheel zoom */
+  range?: boolean;
 }) {
   const theme = usePrefs((s) => s.theme);
   const [dark, setDark] = useState(true);
@@ -99,9 +104,23 @@ export function EChart({
     textStyle: { fontFamily: "var(--font-geist-sans), sans-serif", color: C.muted },
     animationDuration: 300,
     grid: { left: 44, right: 14, top: 22, bottom: 26, containLabel: false },
-    ...(zoom ? { dataZoom: [{ type: "inside", xAxisIndex: 0, filterMode: "none" }] } : {}),
+    ...(zoom || range ? { dataZoom: [{ type: "inside", xAxisIndex: 0, filterMode: "none" }] } : {}),
     ...option,
   };
+  if (range) {
+    base.dataZoom = [
+      { type: "inside", xAxisIndex: 0, filterMode: "none" },
+      {
+        type: "slider", xAxisIndex: 0, height: 14, bottom: 4, filterMode: "none", borderColor: C.hair, backgroundColor: "transparent",
+        fillerColor: token("accent", 0.12), dataBackground: { lineStyle: { color: C.edge }, areaStyle: { color: token("edge", 0.3) } },
+        selectedDataBackground: { lineStyle: { color: C.accent }, areaStyle: { color: token("accent", 0.15) } },
+        handleStyle: { color: C.edge, borderColor: C.subtle }, moveHandleStyle: { color: C.edge }, textStyle: { color: C.subtle, fontSize: 10 },
+        brushSelect: false,
+      },
+    ] as any;
+    const g = (base.grid ?? {}) as any;
+    if (!Array.isArray(g)) base.grid = { ...g, bottom: (typeof g.bottom === "number" ? g.bottom : 26) + 24 };
+  }
   if (base.legend && !Array.isArray(base.legend)) {
     base.legend = { textStyle: { color: C.muted, fontSize: 11 }, itemWidth: 12, itemHeight: 2, icon: "rect", ...(base.legend as object) } as any;
   }

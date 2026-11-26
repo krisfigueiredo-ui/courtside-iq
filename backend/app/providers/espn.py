@@ -28,6 +28,7 @@ from .base import ProviderError, RateLimiter
 log = logging.getLogger(__name__)
 
 BASE = "https://site.api.espn.com/apis/site/v2/sports/basketball"
+CORE = "https://sports.core.api.espn.com/v2/sports/basketball/leagues"
 LEAGUE_PATH = {"NBA": "nba", "CBB": "mens-college-basketball"}
 CACHE_DIR = Path(__file__).resolve().parents[2] / "data" / "espn_cache"
 
@@ -49,8 +50,8 @@ class ESPN:
         h = hashlib.sha1(url.encode()).hexdigest()
         return self.cache_dir / h[:2] / (h + ".json.gz")
 
-    def get(self, path: str, params: dict | None = None, cache: bool = False, retries: int = 3, compact=None) -> dict:
-        url = f"{BASE}/{path}" + ("?" + "&".join(f"{k}={v}" for k, v in params.items()) if params else "")
+    def get(self, path: str, params: dict | None = None, cache: bool = False, retries: int = 3, compact=None, base: str = BASE) -> dict:
+        url = f"{base}/{path}" + ("?" + "&".join(f"{k}={v}" for k, v in params.items()) if params else "")
         cp = self._cache_path(url) if cache else None
         if cp and cp.exists():
             try:
@@ -97,6 +98,12 @@ class ESPN:
         params = {"groups": 50, "limit": 400} if league == "CBB" else {"limit": 50}
         d = self.get(f"{LEAGUE_PATH[league]}/teams", params)
         return [t["team"] for t in d["sports"][0]["leagues"][0]["teams"]]
+
+    def prop_bets(self, league: str, event_id: str, cache: bool = False, provider: str = "100") -> list[dict]:
+        """DraftKings player and team props from ESPN's core API (provider 100 = DraftKings)."""
+        path = f"{LEAGUE_PATH[league]}/events/{event_id}/competitions/{event_id}/odds/{provider}/propBets"
+        d = self.get(path, {"lang": "en", "region": "us", "limit": 1000}, cache=cache, compact=compact_props, base=CORE)
+        return d.get("items", [])
 
     def injuries(self) -> dict:
         return self.get("nba/injuries")
@@ -150,6 +157,27 @@ def compact_scoreboard(d: dict) -> dict:
                 odds=[compact_odds(o) for o in (c.get("odds") or [])[:1]])],
         ))
     return dict(events=events)
+
+
+def _ref_id(ref: dict | None, key: str) -> str | None:
+    href = (ref or {}).get("$ref", "")
+    if f"/{key}/" not in href:
+        return None
+    return href.split(f"/{key}/", 1)[1].split("?", 1)[0].split("/", 1)[0]
+
+
+def compact_props(d: dict) -> dict:
+    items = []
+    for it in d.get("items", []):
+        odds = it.get("odds") or {}
+        items.append(dict(
+            athlete=_ref_id(it.get("athlete"), "athletes"), team=_ref_id(it.get("team"), "teams"),
+            type=(it.get("type") or {}).get("name"),
+            line=(it.get("current") or {}).get("target", {}).get("value"), line_open=(it.get("open") or {}).get("target", {}).get("value"),
+            price=(odds.get("american") or {}).get("value"), price_open=(odds.get("american") or {}).get("open"),
+            last=it.get("lastUpdated"),
+        ))
+    return dict(items=items)
 
 
 def compact_summary(d: dict, players: bool = True) -> dict:

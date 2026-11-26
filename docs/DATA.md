@@ -10,11 +10,12 @@ Source: ESPN's public site API (`https://site.api.espn.com/apis/site/v2/sports/b
 | `.../summary?event={id}` | Team box scores, NBA player box scores, closing line (`pickcenter`) |
 | `mens-college-basketball/teams?groups=50&limit=400` | The 365 Division I programs (games against non-Division I opponents are skipped) |
 | `nba/injuries` | NBA injury report |
+| core API `leagues/nba/events/{id}/competitions/{id}/odds/100/propBets` | DraftKings player props (points, rebounds, assists, threes, PRA), first-half totals and team totals; opening and current values |
 | `nba/teams/{id}/roster` | Current NBA rosters with jersey numbers |
 
 Coverage: NBA 2024-25, 2025-26 and 2026-27 to date (regular season, play-in and playoffs; preseason and All-Star games excluded), and Division I men's basketball 2025-26 and 2026-27 to date. Sportsbook lines are DraftKings as reported by ESPN; ESPN has none for the 2024-25 NBA season and the first weeks of 2025-26. Opening and closing lines carry no timestamp and are recorded 24 hours and 5 minutes before tip-off.
 
-Snapshot generated: 2026-11-25T21:51:21+00:00
+Snapshot generated: 2026-11-26T15:42:54+00:00
 
 | File | Rows | Restored by `load-snapshot` |
 |---|---|---|
@@ -22,17 +23,17 @@ Snapshot generated: 2026-11-25T21:51:21+00:00
 | `teams.csv.gz` | 395 | yes |
 | `sportsbooks.csv.gz` | 4 | yes |
 | `players.csv.gz` | 766 | yes |
-| `roster_memberships.csv.gz` | 538 | yes |
-| `games.csv.gz` | 10,119 | yes |
-| `team_game_stats.csv.gz` | 19,390 | yes |
-| `player_game_stats.csv.gz` | 62,492 | yes |
-| `injuries.csv.gz` | 101 | yes |
-| `odds_snapshots.csv.gz` | 83,044 | yes |
-| `prop_lines.csv.gz` | 0 | yes |
+| `roster_memberships.csv.gz` | 539 | yes |
+| `games.csv.gz` | 10,150 | yes |
+| `team_game_stats.csv.gz` | 19,494 | yes |
+| `player_game_stats.csv.gz` | 62,682 | yes |
+| `injuries.csv.gz` | 114 | yes |
+| `odds_snapshots.csv.gz` | 86,168 | yes |
+| `prop_lines.csv.gz` | 22,885 | yes |
 | `demo_outcomes.csv.gz` | 0 | yes |
 | `assets.csv.gz` | 1,160 | yes |
-| `predictions.csv.gz` | 4,156 | export only |
-| `settlements.csv.gz` | 3,997 | export only |
+| `predictions.csv.gz` | 17,050 | export only |
+| `settlements.csv.gz` | 16,987 | export only |
 | `model_versions.csv.gz` | 3 | export only |
 
 ## Tables
@@ -50,7 +51,7 @@ Snapshot generated: 2026-11-25T21:51:21+00:00
 | `injuries` | NBA injury reports with status and description; `cleared_at` is set when a player leaves the report |
 | `odds_snapshots` | Timestamped lines: moneyline (`h2h`), spreads and totals, opening and every observed change through the close |
 | `assets` | Team logo and player headshot URLs (ESPN CDN; not bundled) |
-| `prop_lines` | Player prop lines (empty unless The Odds API is connected) |
+| `prop_lines` | DraftKings player prop lines (points, rebounds, assists, threes, PRA) with over and under prices; prices are approximate because ESPN does not label the sides |
 | `demo_outcomes` | Used only by the synthetic dataset |
 | `predictions` | Archived model forecasts with probability, line, price, result and model version |
 | `settlements` | Grading records for predictions and picks |

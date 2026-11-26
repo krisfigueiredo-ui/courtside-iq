@@ -137,7 +137,8 @@ function Performance({ lq }: { lq: string }) {
           <PanelHeader eyebrow="Rolling" title={`Hit rate (rolling ${s.data.rolling_window ?? ""}) & cumulative units`} />
           <div className="p-2">
             <EChart
-              height={260}
+              height={290}
+              range
               option={{
                 grid: { left: 40, right: 44, top: 28, bottom: 26 },
                 legend: { top: 0, textStyle: { color: C.mist4, fontSize: 11 } },

@@ -16,6 +16,7 @@ import { Badge, DemoBadge, Empty, ErrorState, KV, Panel, PanelHeader, ProbBar, R
 import { STATIC, useApi } from "@/lib/api";
 import { american, cn, dateTime, MARKET_LABEL, num, pct, signed, spreadLine, STAT_LABEL } from "@/lib/format";
 import { useSelection } from "@/lib/store";
+import { HeadToHead } from "@/components/views/HeadToHead";
 import type { Game, Projection, PropProjection } from "@/lib/types";
 
 export default function GameView({ id }: { id: string }) {
@@ -24,7 +25,7 @@ export default function GameView({ id }: { id: string }) {
   const props = useApi<PropProjection[]>(`/api/games/${id}/props`);
   const [mvMarket, setMvMarket] = useState<"spreads" | "totals" | "h2h">("spreads");
   const [stat, setStat] = useState("pts");
-  const [tab, setTab] = useState<"model" | "flow" | "props" | "log">("model");
+  const [tab, setTab] = useState<"model" | "flow" | "h2h" | "props" | "log">("model");
   const select = useSelection((st) => st.select);
   const gd: Game | undefined = q.data?.game;
   useEffect(() => {
@@ -47,6 +48,7 @@ export default function GameView({ id }: { id: string }) {
         tabs={[
           { value: "model", label: "Model & market" },
           { value: "flow", label: "Game flow" },
+          { value: "h2h", label: "Head-to-head" },
           { value: "props", label: "Player props", count: props.data?.length || undefined },
           { value: "log", label: "Forecast log", count: q.data.predictions?.length || undefined },
         ]}
@@ -328,6 +330,7 @@ export default function GameView({ id }: { id: string }) {
       )}
         </div>
       )}
+      {tab === "h2h" && <HeadToHead g={g} />}
       {tab === "props" && (
         <div className="space-y-3">
       {(props.data?.length ?? 0) > 0 && (

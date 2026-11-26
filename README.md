@@ -8,7 +8,7 @@
 
 **Live site: https://krisfigueiredo-ui.github.io/courtside-iq/** (real games, rebuilt every two hours, live scores in the browser)
 
-Basketball analytics platform for the NBA and NCAA Division I men's basketball, running on real data: schedules, live scores, final scores, team and player box scores, DraftKings opening and closing lines, the NBA injury report and NBA rosters from ESPN's public API. It combines a live scoreboard, league-specific machine-learning projections, Monte Carlo simulation, sportsbook market comparison, player prop distributions, a trends lab, a permanent prediction archive with automated grading, a data import and cleaning pipeline, and an AI research assistant that answers questions from the platform's own records.
+Basketball analytics platform for the NBA and NCAA Division I men's basketball, running on real data: schedules, live scores, final scores, team and player box scores, DraftKings opening and closing lines (game lines, first-half and team totals, NBA player props), the NBA injury report and NBA rosters from ESPN's public APIs. It combines a live scoreboard, league-specific machine-learning projections, Monte Carlo simulation, sportsbook market comparison, player prop distributions, a trends lab, a permanent prediction archive with automated grading, a data import and cleaning pipeline, and an AI research assistant that answers questions from the platform's own records.
 
 ![Command Center](docs/screenshots/command-center.png)
 
@@ -139,7 +139,7 @@ Settings are read from environment variables (see `.env.example`). API keys are 
 | `ESPN_SEASONS_NBA`, `ESPN_SEASONS_CBB` | Seasons of history to load on first run (default 3 and 2) |
 | `ESPN_POLL_SECONDS` | Live refresh interval for scores and lines (default 60) |
 | `BALLDONTLIE_API_KEY` | Optional alternative feed for games, box scores, rosters, injuries |
-| `ODDS_API_KEY` | Optional: player prop lines, first-half and team totals, more sportsbooks (The Odds API v4) |
+| `ODDS_API_KEY` | Optional: more sportsbooks and alternate lines (The Odds API v4) |
 | `SPORTSDATAIO_API_KEY` | Health checks only; endpoint mapping depends on the subscription |
 | `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`, `AI_EFFORT` | COURTSIDE AI |
 | `LICENSED_LOGO_BASE_URL` | Base URL of a licensed logo CDN (`{slug}.svg`) |
@@ -159,25 +159,26 @@ With `DATA_SOURCE=espn` (the default) the scheduler:
 - verifies NBA rosters against ESPN every six hours
 - freezes pre-game forecasts and grades them after the final
 
-With `ODDS_API_KEY` set it also pulls first-half totals, team totals, alternate lines and player props for games starting within 12 hours.
+Every hour it also loads DraftKings player props, first-half totals and team totals for NBA games tipping off in the next 36 hours (and the closing props of games that have finished) from ESPN's core API. With `ODDS_API_KEY` set it adds more sportsbooks and alternate lines.
 
 `DATA_SOURCE=demo` runs on a synthetic dataset instead. The interface then shows a demo banner and `DEMO` labels, and every demo row carries `is_demo = true`. The test suite uses this mode so it runs offline.
 
 ## Data
 
-The repository includes a snapshot of the real dataset in `backend/data/espn_snapshot/`, as gzipped CSV files with a manifest of row counts and SHA-256 checksums (taken November 25, 2026):
+The repository includes a snapshot of the real dataset in `backend/data/espn_snapshot/`, as gzipped CSV files with a manifest of row counts and SHA-256 checksums (taken November 26, 2026):
 
 | Table | Rows |
 |---|---|
-| Games: NBA 2024-25, 2025-26 and 2026-27 to date; Division I 2025-26 and 2026-27 to date | 10,119 |
-| Team box scores | 19,390 |
-| Player game logs (NBA) | 62,492 |
-| DraftKings line snapshots (spread, total, moneyline; opening and closing) | 83,044 |
+| Games: NBA 2024-25, 2025-26 and 2026-27 to date; Division I 2025-26 and 2026-27 to date | 10,150 |
+| Team box scores | 19,494 |
+| Player game logs (NBA) | 62,682 |
+| DraftKings line snapshots (spread, total, moneyline, first-half and team totals; opening and closing) | 86,168 |
+| DraftKings player prop lines (points, rebounds, assists, threes, PRA; opening and closing) | 22,885 |
 | Teams (30 NBA, 365 Division I) and conferences | 395 / 34 |
-| Players, verified roster memberships, injury reports | 766 / 538 / 101 |
-| Archived predictions (export only) | 4,156 |
+| Players, verified roster memberships, injury reports | 766 / 539 / 114 |
+| Archived predictions (export only) | 17,050 |
 
-Source: ESPN's public site API (`site.api.espn.com`), which needs no key but is unofficial and undocumented. Notes:
+Sources: ESPN's public site API (`site.api.espn.com`) and core API (`sports.core.api.espn.com`, player props), which need no key but are unofficial and undocumented. Notes:
 
 - Closing lines carry no timestamp. They are recorded five minutes before tip-off, opening lines 24 hours before.
 - ESPN has no lines for the 2024-25 NBA season or the first weeks of 2025-26, so those games are training data only.
@@ -235,14 +236,16 @@ Held-out test fold (the last 15% of the training seasons):
 | NBA | 383 | 11.93 / 12.59 / 11.77 | 15.03 / 15.50 / 15.30 | 0.172 |
 | CBB | 767 | 9.19 / 9.48 / 9.22 | 13.57 / 13.94 / 14.37 | 0.196 |
 
-2026-27 season to date, walk-forward and graded against DraftKings closing lines (snapshot of November 25, 2026):
+2026-27 season to date, walk-forward and graded against DraftKings closing lines (snapshot of November 26, 2026):
 
 | League | Games | Moneyline | Spread | Total |
 |---|---|---|---|---|
-| NBA | 261 | 183-78 (70.1%) | 133-128 (51.0%) | 130-131 (49.8%) |
-| CBB | 1,071 | 815-257 (76.0%) | 534-537 (49.9%) | 598-473 (55.8%) |
+| NBA | 270 | 187-83 (69.3%) | 135-135 (50.0%) | 133-137 (49.3%) |
+| CBB | 1,115 | 843-272 (75.6%) | 555-559 (49.8%) | 620-494 (55.7%) |
 
-The closing line is hard to beat. Against the spread, both leagues are at coin-flip level, and the fitted market weight for NBA spreads and totals is zero: the model adds no information beyond the NBA closing line. The tree ensemble improves college totals clearly over the efficiency baseline, and college totals are 55.8% over 1,071 games, with overs and unders hitting at similar rates while games split 50.5% under. That is one month of one season, so treat it as a lead to keep testing, not a proven edge. The live site recomputes these figures on every build.
+NBA player props against the DraftKings closing prop line: points 1,738-1,657 (51.2%), rebounds 1,136-1,091 (51.0%), assists 850-770 (52.5%), threes 887-788 (53.0%), PRA 1,377-1,266 (52.1%). First-half totals 140-120 (53.8%). The fitted prop blend puts no weight on the model for points and rebounds (the closing line alone predicts best), about 0.1 for assists, and keeps the 0.5 prior for threes.
+
+The closing line is hard to beat. Against the spread, both leagues are at coin-flip level, props are a point or two above 50% before the vig, and the fitted market weight for NBA spreads and totals is zero: the model adds no information beyond the NBA closing line. The tree ensemble improves college totals clearly over the efficiency baseline, and college totals are 55.7% over 1,114 games, with overs and unders hitting at similar rates while games split 50.5% under. That is one month of one season, so treat it as a lead to keep testing, not a proven edge. The live site recomputes these figures on every build.
 
 ### Player props
 
@@ -250,7 +253,7 @@ The closing line is hard to beat. Against the spread, both leagues are at coin-f
 2. Opportunity: per-minute production rates, shrunk toward the season rate and adjusted for pace and opponent defense.
 3. Outcomes: Negative Binomial simulations that share a game-flow multiplier, so points, assists and threes are positively correlated. PRA is summed per simulation.
 
-ESPN does not publish player prop lines, so props are shown as projections and distributions unless The Odds API is connected. When a sportsbook line exists, the mean is anchored to it with a per-stat weight. The weight is fit on the oldest 70% of settled prop forecasts and checked on the newest 30%. It is adopted only when it beats the default weight of 0.5 on that holdout, and it applies to new forecasts only.
+DraftKings prop lines (points, rebounds, assists, threes, PRA) come from ESPN's core API. ESPN does not label which of the two prices is the over: lines are exact, so grading is exact, but prices are approximate (averaged when the two are close; when lopsided, assigned using the player's own recent game log, and the prop is skipped when that is ambiguous). When a sportsbook line exists, the mean is anchored to it with a per-stat weight. The weight is fit on the oldest 70% of settled prop forecasts and checked on the newest 30%. It is adopted only when it beats the default weight of 0.5 on that holdout, and it applies to new forecasts only.
 
 ## Prediction archive and grading
 
@@ -337,7 +340,7 @@ cd ../frontend && STATIC_EXPORT=1 NEXT_PUBLIC_STATIC=1 npm run build    # output
 ## Limitations
 
 - ESPN's site API is public but unofficial: it has no published terms for this use, field names can change without notice, and closing lines are not timestamped. The sync is defensive and covered by tests on recorded payloads.
-- ESPN provides DraftKings lines only. Player prop lines, first-half and team totals, alternate lines and other sportsbooks need The Odds API.
+- ESPN provides DraftKings lines only. Other sportsbooks and alternate lines need The Odds API. Player prop prices are approximate because ESPN does not label the over and under (see Player props).
 - College player box scores are not loaded; college props are not modeled.
 - Historical injury reports are not available, so the injury features only affect upcoming games.
 - Team logos and player headshots are trademarks and likenesses of their owners. They are linked from ESPN's CDN for identification and are not bundled; if an image fails to load, an original crest or illustration is shown.

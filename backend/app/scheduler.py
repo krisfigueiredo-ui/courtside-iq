@@ -103,6 +103,9 @@ def _espn_cycle(db, now: datetime, force: bool) -> dict:
         out["espn"] = espn_sync.sync_live(db, now=now, s=syncer, schedule=schedule)
         if schedule:
             _state["last_schedule"] = time.time()
+            from .providers import espn_props
+
+            out["espn_props"] = espn_props.sync_props(db, espn_props.games_needing_props(db, now), syncer, now)
         if force or time.time() - _state["last_espn_injuries"] > INJURY_SECONDS:
             out["espn_injuries"] = espn_sync.sync_injuries(db, syncer)
             _state["last_espn_injuries"] = time.time()

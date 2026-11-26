@@ -9,6 +9,7 @@ import { StatusPill } from "@/components/game/game";
 import { PlayerPortrait, RosterBadge, TeamCrest } from "@/components/identity/identity";
 import { Badge, DemoBadge, Empty, ErrorState, KV, Panel, PanelHeader, ProbBar, ResultBadge, Segmented, Skeleton, SourceStamp, Stat, StatStrip } from "@/components/ui/primitives";
 import { useApi } from "@/lib/api";
+import { PlayerHeatmap } from "@/components/views/PlayerHeatmap";
 import { useSelection } from "@/lib/store";
 import { StreakCell } from "@/components/views/StreaksView";
 import { american, num, pct, signed, STAT_LABEL } from "@/lib/format";
@@ -84,6 +85,7 @@ export default function PlayerView({ id }: { id: string }) {
         </Panel>
       ) : (
         <>
+          <PlayerHeatmap games={games} />
           <div className="grid gap-3 xl:grid-cols-[1fr_400px]">
             <Panel>
               <PanelHeader
@@ -92,7 +94,7 @@ export default function PlayerView({ id }: { id: string }) {
                 right={<Segmented size="sm" value={stat} onChange={setStat} options={["pts", "reb", "ast", "fg3m", "minutes"].map((s) => ({ value: s, label: s === "fg3m" ? "3PM" : s.toUpperCase() }))} />}
               />
               <div className="p-2">
-                <EChart
+                <EChart range
                   height={300}
                   option={{
                     grid: { left: 36, right: 16, top: 30, bottom: 30 },

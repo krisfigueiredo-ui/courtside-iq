@@ -41,6 +41,13 @@ def prepare(db: Session) -> dict:
         except Exception as exc:
             log.exception("espn %s sync failed", name)
             out[name] = f"error: {exc}"
+    try:
+        from ..providers import espn_props
+
+        out["props"] = espn_props.sync_props(db, espn_props.games_needing_props(db), syncer)
+    except Exception as exc:  # the core API is optional; game lines and box scores do not depend on it
+        log.exception("espn props sync failed")
+        out["props"] = f"error: {exc}"
     out["pruned_registry_teams"] = E.prune_unmatched_registry(db)
     out["pregame_context"] = provider_sync.refresh_pregame_context(db)
     return out

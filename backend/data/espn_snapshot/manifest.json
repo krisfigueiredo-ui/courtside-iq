@@ -1,6 +1,6 @@
 {
   "format": 1,
-  "generated_at": "2026-11-25T21:51:21+00:00",
+  "generated_at": "2026-11-26T15:42:54+00:00",
   "description": "Real NBA and NCAA Division I men's games from ESPN's public API: final scores, team and player box scores, DraftKings opening and closing lines, injuries and rosters.",
   "tables": {
     "conferences": {
@@ -29,44 +29,44 @@
     },
     "roster_memberships": {
       "file": "roster_memberships.csv.gz",
-      "rows": 538,
-      "sha256": "dcf12bbb7e8eebddc036fa3a3cb2ac93efb6860455f578e95f189007ed99e2d5",
+      "rows": 539,
+      "sha256": "5f72e762112c41a55b2b7868ebc27c883f9ee7951ee06de47a012b2717875556",
       "restore": true
     },
     "games": {
       "file": "games.csv.gz",
-      "rows": 10119,
-      "sha256": "cedf8403477022a691465fd818045800665456ccbd171b8cecdc4fd4f237d95f",
+      "rows": 10150,
+      "sha256": "0a93e4e08aab896a700660a7ce38c8cdfca583ae0a005131bfdce3cf4dfd34a8",
       "restore": true
     },
     "team_game_stats": {
       "file": "team_game_stats.csv.gz",
-      "rows": 19390,
-      "sha256": "68fcfade199ac3072c3d5381e75e3147168c16925dfca670a53e7a485b9eeade",
+      "rows": 19494,
+      "sha256": "45250cb4bb537ea3b334475a9473222ca97bbc25d12e87c3c5f7b280e73017b4",
       "restore": true
     },
     "player_game_stats": {
       "file": "player_game_stats.csv.gz",
-      "rows": 62492,
-      "sha256": "3c6fa7221f6fb6f8a59d5f534b5f4900304414a275eef0e177678f847034f443",
+      "rows": 62682,
+      "sha256": "f5e0d27a6cbc4032b2278625446eaf02c0aa3fe334c6a137469f8d5b3cb266cd",
       "restore": true
     },
     "injuries": {
       "file": "injuries.csv.gz",
-      "rows": 101,
-      "sha256": "9101f9bc751d875005dabbe8bc8a40c7d1893802030a0ffaeb8e770e6299494c",
+      "rows": 114,
+      "sha256": "3b70b944935a81d08a9df1bedf484f1a86054df46ef85ef15433ab21e6175d1a",
       "restore": true
     },
     "odds_snapshots": {
       "file": "odds_snapshots.csv.gz",
-      "rows": 83044,
-      "sha256": "cef39ae90824e5b7d699d2590a6af790938a23dfb7d5113b77489ccd9383667e",
+      "rows": 86168,
+      "sha256": "184e24588f989b9ab8df3d90ab2ba0d3b96770a39d772994b0b74ba4e0ef745a",
       "restore": true
     },
     "prop_lines": {
       "file": "prop_lines.csv.gz",
-      "rows": 0,
-      "sha256": "7c07114d1bc709e46629791914b19d29336836cf7b1e856c15d31781e40422c0",
+      "rows": 22885,
+      "sha256": "a26fd6605b27a0ecca8e1fd48671b54e9cdb1163fc9f120c1a69cac871bc09be",
       "restore": true
     },
     "demo_outcomes": {
@@ -83,20 +83,20 @@
     },
     "predictions": {
       "file": "predictions.csv.gz",
-      "rows": 4156,
-      "sha256": "cd479c77ea41125bfdaae4304d0fe8373081b5f5b27eb9849dcfdf428514c1e3",
+      "rows": 17050,
+      "sha256": "600b190c8eed1aa89985b1c157512c0d59974b75305d8375d4668c3b10679ce5",
       "restore": false
     },
     "settlements": {
       "file": "settlements.csv.gz",
-      "rows": 3997,
-      "sha256": "c403171a1b17612435151d0b7c15fe2f3dd77fba166ac54498efecfba44353eb",
+      "rows": 16987,
+      "sha256": "a795f392d069d19f67811b5a9c8684d7d022b1e507ca92d5c722b1c553c7e77f",
       "restore": false
     },
     "model_versions": {
       "file": "model_versions.csv.gz",
       "rows": 3,
-      "sha256": "002b4ad86260943ddb7738c1adc78227ceb695c8448cb2b08c3399e4804e4947",
+      "sha256": "3ca3e32865edb969fe6e83afc2d24bc34adaa1baa5df10c5c519ee226717d3b0",
       "restore": false
     }
   }

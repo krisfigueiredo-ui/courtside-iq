@@ -7,6 +7,7 @@ import { useMemo, useState } from "react";
 import { C, EChart, SERIES, baseAxis, tooltip } from "@/components/charts/EChart";
 import { DistributionChart } from "@/components/game/game";
 import { Badge, Button, Empty, KV, PageHeader, Panel, PanelHeader, Segmented, Skeleton, Stat, StatStrip } from "@/components/ui/primitives";
+import { ResidualsView } from "@/components/views/ResidualsView";
 import { STATIC, STATIC_MESSAGE, api, useApi } from "@/lib/api";
 import { cn, dateTime, featureLabel, num, pct, signed } from "@/lib/format";
 import type { BoardRow } from "@/lib/types";
@@ -77,6 +78,7 @@ export default function ModelIntelligence() {
       </Panel>
 
       {game ? <GameModelCard m={game} /> : !models.isLoading && <Panel><Empty title="No trained model for this league" /></Panel>}
+      <ResidualsView league={league} />
       <VersionComparison league={league} />
       {props && <PropsModelCard m={props} />}
       <SimulationExplorer league={league} />

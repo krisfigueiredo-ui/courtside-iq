@@ -140,7 +140,7 @@ function TeamTrends() {
               right={<Segmented size="sm" value={metric} onChange={setMetric} options={[{ value: "efficiency", label: "Efficiency" }, { value: "pace", label: "Pace" }, { value: "scoring", label: "Scoring" }]} />}
             />
             <div className="p-2">
-              <EChart
+              <EChart range
                 height={300}
                 option={{
                   grid: { left: 40, right: 16, top: 30, bottom: 30 },

@@ -393,7 +393,8 @@ def fit_prop_blend(db: Session, league: str, min_n: int = 120) -> dict:
 
 def _corr(sims: dict) -> dict:
     keys = ["pts", "reb", "ast", "fg3m"]
-    c = np.corrcoef(np.vstack([sims[k] for k in keys]))
+    with np.errstate(invalid="ignore", divide="ignore"):
+        c = np.nan_to_num(np.corrcoef(np.vstack([sims[k] for k in keys])))
     return dict(keys=keys, matrix=[[float(x) for x in row] for row in c])
 
 

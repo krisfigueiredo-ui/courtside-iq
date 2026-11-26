@@ -63,7 +63,7 @@ export default function TeamView({ id }: { id: string }) {
           <PanelHeader eyebrow={`${tr.season ?? ""} · n=${tr.n_season ?? 0}`} title="Margin by game with 5-game rolling net rating" right={<Link href="/research" className="text-xs text-volt-300 hover:underline">Research Lab</Link>} />
           <div className="p-2">
             {games.length ? (
-              <EChart
+              <EChart range
                 height={280}
                 option={{
                   grid: { left: 36, right: 16, top: 26, bottom: 30 },

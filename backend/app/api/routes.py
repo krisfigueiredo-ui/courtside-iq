@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import numpy as np
+
 import asyncio
 import json
 from datetime import date, datetime, timedelta, timezone
@@ -249,6 +251,46 @@ def game_detail(game_id: int, n_sims: int = Query(default=10000, ge=1000, le=100
                        box=box, live=live, context=g.pregame_context))
 
 
+@router.get("/games/{game_id}/h2h")
+def game_h2h(game_id: int, limit: int = 20, db: Session = Depends(get_db)):
+    """Previous meetings of the two teams (any season), from the current home team's side, with closing lines."""
+    from ..services.dataset import market_lines
+
+    g = db.get(m.Game, game_id)
+    if not g:
+        raise HTTPException(404)
+    pair = {g.home_team_id, g.away_team_id}
+    q = (select(m.Game).where(m.Game.league == g.league, m.Game.status == "final", m.Game.start_time < g.start_time,
+                              m.Game.home_team_id.in_(pair), m.Game.away_team_id.in_(pair), m.Game.is_historical_sim.is_(False))
+         .order_by(m.Game.start_time.desc()).limit(limit))
+    past = [x for x in db.scalars(q) if {x.home_team_id, x.away_team_id} == pair]
+    lines = market_lines(db, g.league, lead_minutes=55 if g.is_demo else 3).set_index("id") if past else None
+    rows, w, ats, ou = [], 0, {"cover": 0, "fail": 0, "push": 0}, {"over": 0, "under": 0, "push": 0}
+    for x in past:
+        same_home = x.home_team_id == g.home_team_id
+        margin = (x.home_score - x.away_score) * (1 if same_home else -1)
+        total = x.home_score + x.away_score
+        sp = lines["mkt_spread_home"].get(x.id) if lines is not None and x.id in lines.index else None
+        tl = lines["mkt_total"].get(x.id) if lines is not None and x.id in lines.index else None
+        sp = None if sp is None or sp != sp else float(sp)
+        tl = None if tl is None or tl != tl else float(tl)
+        line = None if sp is None else (sp if same_home else -sp)  # current home team's spread in that game
+        a = None if line is None else ("cover" if margin + line > 0 else "fail" if margin + line < 0 else "push")
+        o = None if tl is None else ("over" if total > tl else "under" if total < tl else "push")
+        w += margin > 0
+        if a:
+            ats[a] += 1
+        if o:
+            ou[o] += 1
+        rows.append(dict(game_id=x.id, date=iso(x.start_time), season=x.season, at_home=same_home, neutral=x.neutral_site,
+                         score=f"{x.home_score}-{x.away_score}", home_abbr=x.home_team.abbreviation, away_abbr=x.away_team.abbreviation,
+                         margin=margin, total=total, spread=line, total_line=tl, ats=a, ou=o))
+    n = len(rows)
+    return _clean(dict(team=g.home_team.abbreviation, opponent=g.away_team.abbreviation, n=n, wins=int(w), losses=n - int(w),
+                       avg_margin=float(np.mean([r["margin"] for r in rows])) if n else None,
+                       avg_total=float(np.mean([r["total"] for r in rows])) if n else None, ats=ats, ou=ou, games=rows))
+
+
 def _live_projection(g: m.Game, proj: dict) -> dict:
     """Blend pre-game projection with the current score in proportion to time remaining."""
     from scipy.stats import norm
@@ -415,6 +457,11 @@ def perf_streaks(by: str = "team", league: str | None = None, market: str = "all
     if by not in ("team", "player", "conference"):
         raise HTTPException(400, "by must be team|player|conference")
     return _clean(streaks.streaks(db, by, league.upper() if league else None, market, min_n))
+
+
+@router.get("/performance/residuals")
+def perf_residuals(league: str | None = None, db: Session = Depends(get_db)):
+    return _clean(performance.residuals(db, league.upper() if league else None))
 
 
 @router.get("/performance/clv")

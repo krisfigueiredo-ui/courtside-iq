@@ -173,3 +173,37 @@ def clv_report(db: Session, league: str | None = None) -> dict:
                        matched_close=float((g["clv"] == 0).mean()), unit="probability" if mk == "moneyline" else "points")
     return dict(markets=out, n=int(len(d)),
                 note="Forecast lines are frozen before tip-off; the closing line is the consensus of each book's last pre-tip snapshot.")
+
+
+RESIDUAL_GROUPS = {"spread": "margin", "total": "total", "h1_total": "h1_total", "team_total_home": "team_total",
+                   "team_total_away": "team_total", "prop_pts": "points", "prop_reb": "rebounds", "prop_ast": "assists",
+                   "prop_fg3m": "threes", "prop_pra": "pra"}
+
+
+def residuals(db: Session, league: str | None = None, sample: int = 500) -> dict:
+    """Point-forecast errors (actual minus predicted) of official pre-game forecasts, by target."""
+    df = official_predictions(db, league)
+    if df.empty:
+        return dict(groups={})
+    df = df[df["actual_value"].notna() & df["predicted_value"].notna() & df["market"].isin(list(RESIDUAL_GROUPS))]
+    df = df.assign(target=df["market"].map(RESIDUAL_GROUPS), resid=df["actual_value"] - df["predicted_value"])
+    out = {}
+    for tgt, d in df.groupby("target"):
+        d = d.sort_values("start_time")
+        r = d["resid"].values
+        width = 1 if tgt in ("rebounds", "assists", "threes") else 2 if tgt in ("points", "pra", "h1_total", "team_total") else 3
+        lo, hi = np.floor(np.percentile(r, 1) / width) * width, np.ceil(np.percentile(r, 99) / width) * width
+        edges = np.arange(lo, hi + width, width)
+        counts, _ = np.histogram(np.clip(r, lo, hi), bins=edges) if len(edges) > 1 else (np.array([len(r)]), None)
+        qs = pd.qcut(d["predicted_value"], q=min(8, max(2, len(d) // 40)), duplicates="drop")
+        bins = d.groupby(qs, observed=True).agg(pred=("predicted_value", "mean"), actual=("actual_value", "mean"), n=("resid", "size")).reset_index(drop=True)
+        monthly = d.assign(month=d["start_time"].dt.strftime("%Y-%m")).groupby("month")["resid"].agg(["mean", "size"]).reset_index()
+        step = max(1, len(d) // sample)
+        out[tgt] = dict(
+            n=int(len(d)), bias=float(r.mean()), mae=float(np.abs(r).mean()), rmse=float(np.sqrt((r ** 2).mean())), sd=float(r.std()),
+            histogram=[dict(x=float(edges[i]), count=int(counts[i])) for i in range(len(counts))], bin_width=width,
+            by_predicted=[dict(pred=float(b.pred), actual=float(b.actual), n=int(b.n)) for b in bins.itertuples()],
+            monthly=[dict(month=x.month, bias=float(x.mean), n=int(x.size)) for x in monthly.itertuples()],
+            points=[dict(pred=float(p), actual=float(a)) for p, a in zip(d["predicted_value"].values[::step], d["actual_value"].values[::step])],
+        )
+    return dict(groups=out, note="Residual = actual − predicted on official pre-game forecasts. Positive bias means the model ran low.")

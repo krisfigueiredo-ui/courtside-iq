@@ -48,7 +48,7 @@ def static_paths() -> list[str]:
     paths += _leagues("/api/ticker") + _leagues("/api/board")
     for hours in (6, 40):
         paths += _leagues(f"/api/board?hours={hours}", "&")
-    for p in ("/api/performance/summary", "/api/performance/clv", "/api/diagnostics"):
+    for p in ("/api/performance/summary", "/api/performance/clv", "/api/diagnostics", "/api/performance/residuals"):
         paths += _leagues(p)
     for by in ("market", "team", "player", "conference"):
         paths += _leagues(f"/api/performance/breakdown?by={by}", "&")
@@ -113,6 +113,7 @@ def export(out_dir: Path | str, window_days: int = GAME_WINDOW_DAYS) -> dict:
             save(client, f"/api/games/{gid}/props")
             save(client, f"/api/odds/{gid}/movement")
             save(client, f"/api/simulate/{gid}?n=10000")
+            save(client, f"/api/games/{gid}/h2h")
     index = dict(generated_at=datetime.now(timezone.utc).isoformat(timespec="seconds"), games=sorted(game_ids),
                  players=sorted(players), teams=sorted(teams), files=written, failed=[f"{p} ({c})" for p, c in failed])
     (out / "_index.json").write_text(json.dumps(index))

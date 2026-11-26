@@ -73,3 +73,16 @@ test("streaks table expands a team row", async ({ page }, info) => {
   await page.getByRole("button", { name: "Expand row" }).first().click();
   await expect(page.locator("main")).toContainText(/Results|Model by market|Last 10 forecasts/);
 });
+
+test("game page head-to-head tab and model residuals render", async ({ page }, info) => {
+  test.skip(info.project.name !== "desktop", "checked once");
+  const errors = watchErrors(page);
+  await page.goto("model/");
+  await expect(page.locator("main")).toContainText("Residual analysis", { timeout: 20_000 });
+  await page.goto("");
+  await page.locator("main table tbody tr").first().click();
+  await expect(page).toHaveURL(/\/games\/\d+/);
+  await page.getByRole("tab", { name: "Head-to-head" }).click();
+  await expect(page.locator("main")).toContainText(/previous meetings|No previous meetings/);
+  expect(errors, errors.join("\n")).toEqual([]);
+});
