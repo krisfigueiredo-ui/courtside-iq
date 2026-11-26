@@ -54,24 +54,32 @@ jobs:
       - name: Prepare data and models
         working-directory: backend
         run: python -m app.cli bootstrap
-      - name: Save the live forecast ledger
-        working-directory: backend
-        run: python -m app.cli export-ledger
-      - name: Push the ledger branch
+      - name: Save and push the live forecast ledger
+        # Merge into the newest ledger on the branch (another run may have pushed since the
+        # restore), so no forecast is ever dropped; retry if the push races another run.
         run: |
           WORK="$(mktemp -d)"; cd "$WORK"
           git init -q -b ledger
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           REMOTE="https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
-          if git fetch -q "$REMOTE" ledger 2>/dev/null; then git checkout -q -B ledger FETCH_HEAD; fi
-          cp "$GITHUB_WORKSPACE/backend/data/ledger/live_predictions.jsonl.gz" .
-          printf '%s\n' "# COURTSIDE IQ live forecast ledger" "" \
-            "Append-only record of forecasts frozen in real time before tip-off (one JSON object per line, gzipped)." \
-            "Each commit is written by the Pages workflow; the history shows when every forecast existed." > README.md
-          git add -A
-          git diff --cached --quiet || git commit -q -m "Ledger update ${GITHUB_SHA::7} $(date -u +%Y-%m-%dT%H:%MZ)"
-          git push -q "$REMOTE" ledger
+          LEDGER="$GITHUB_WORKSPACE/backend/data/ledger/live_predictions.jsonl.gz"
+          for attempt in 1 2 3; do
+            if git fetch -q "$REMOTE" ledger 2>/dev/null; then
+              git checkout -q -B ledger FETCH_HEAD
+              if [ -f live_predictions.jsonl.gz ]; then cp live_predictions.jsonl.gz "$LEDGER"; fi
+            fi
+            (cd "$GITHUB_WORKSPACE/backend" && python -m app.cli export-ledger)
+            cp "$LEDGER" .
+            printf '%s\n' "# COURTSIDE IQ live forecast ledger" "" \
+              "Append-only record of forecasts frozen in real time before tip-off (one JSON object per line, gzipped)." \
+              "Each commit is written by the Pages workflow; the history shows when every forecast existed." > README.md
+            git add -A
+            git diff --cached --quiet || git commit -q -m "Ledger update ${GITHUB_SHA::7} $(date -u +%Y-%m-%dT%H:%MZ)"
+            if git push -q "$REMOTE" ledger; then exit 0; fi
+            echo "push rejected (attempt $attempt), merging again"; sleep 5
+          done
+          exit 1
       - name: Export API responses
         working-directory: backend
         run: python -m app.cli export-static --out ../frontend/public/data

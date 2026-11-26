@@ -9,7 +9,7 @@ import { C, EChart, baseAxis, tooltip } from "@/components/charts/EChart";
 import { TeamCrest } from "@/components/identity/identity";
 import { DataTable } from "@/components/ui/DataTable";
 import { Badge, Empty, Panel, PanelHeader, ResultBadge, Segmented, Skeleton, SourceStamp, Stat, StatStrip, Tip } from "@/components/ui/primitives";
-import { useApi } from "@/lib/api";
+import { BASE_PATH, REPO_URL, STATIC, useApi } from "@/lib/api";
 import { american, cn, dateShort, dateTime, pct, signed, timeShort } from "@/lib/format";
 import { usePrefs } from "@/lib/store";
 import type { Game } from "@/lib/types";
@@ -142,6 +142,17 @@ function LiveRecord({ league }: { league: string }) {
           }}
         />
       )}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-hair px-3 py-1.5 text-2xs text-subtle">
+        <span>Every forecast is committed to the ledger before tip-off and only its result is added later.</span>
+        <a className="text-muted underline decoration-hair underline-offset-2 hover:text-fg" href={`${REPO_URL}/commits/ledger`} target="_blank" rel="noreferrer">
+          Commit history
+        </a>
+        {STATIC && (
+          <a className="text-muted underline decoration-hair underline-offset-2 hover:text-fg" href={`${BASE_PATH}/data/live_predictions.jsonl.gz`} download>
+            Download the raw ledger
+          </a>
+        )}
+      </div>
     </Panel>
   );
 }
