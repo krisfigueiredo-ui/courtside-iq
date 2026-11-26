@@ -1,4 +1,6 @@
 """Model evaluation, leakage and reproducibility tests."""
+from datetime import datetime, timezone
+
 import numpy as np
 import pandas as pd
 from sqlalchemy import select
@@ -89,10 +91,29 @@ def test_archive_is_append_only_and_pregame(trained, db):
     n_before = db.query(m.Prediction).count()
     from app.services.modeling import archive_game_predictions
 
-    g = db.scalar(select(m.Game).where(m.Game.league == "CBB", m.Game.status == "scheduled", m.Game.is_historical_sim.is_(False)))
-    archive_game_predictions(db, g)
-    archive_game_predictions(db, g)
-    assert db.query(m.Prediction).count() > n_before  # new snapshots added, older rows untouched
+    g = db.scalar(select(m.Game).where(m.Game.league == "CBB", m.Game.status == "scheduled", m.Game.is_historical_sim.is_(False),
+                                       m.Game.id.in_(select(m.OddsSnapshot.game_id).where(m.OddsSnapshot.market == "spreads"))))
+    old = {p.id: (p.market, p.selection, p.line, p.predicted_prob) for p in db.scalars(select(m.Prediction))}
+    archive_game_predictions(db, g, mode="backtest")
+    assert db.query(m.Prediction).count() > n_before  # new snapshots added
+    assert all((p.market, p.selection, p.line, p.predicted_prob) == old[p.id] for p in db.scalars(select(m.Prediction)) if p.id in old)
+    # live re-freezes only add markets whose pick, line or price changed
+    archive_game_predictions(db, g, mode="live")
+    assert archive_game_predictions(db, g, mode="live") == []
+    now = datetime.now(timezone.utc)
+    latest = {}
+    for o in db.scalars(select(m.OddsSnapshot).where(m.OddsSnapshot.game_id == g.id, m.OddsSnapshot.market == "spreads").order_by(m.OddsSnapshot.captured_at)):
+        latest[(o.sportsbook_id, o.outcome)] = o
+    for o in latest.values():
+        db.add(m.OddsSnapshot(game_id=g.id, sportsbook_id=o.sportsbook_id, market="spreads", outcome=o.outcome, line=o.line + (1.0 if o.outcome == "home" else -1.0),
+                              price_american=o.price_american, captured_at=now, source=o.source, is_demo=o.is_demo))
+    db.commit()
+    prev = {}
+    for p in db.scalars(select(m.Prediction).where(m.Prediction.game_id == g.id).order_by(m.Prediction.data_as_of, m.Prediction.id)):
+        prev[(p.market, p.player_id)] = (p.selection, p.line, p.price_american)
+    moved = archive_game_predictions(db, g, mode="live")
+    assert "spread" in {p.market for p in moved} and len(moved) < len(prev)
+    assert all((p.selection, p.line, p.price_american) != prev[(p.market, p.player_id)] for p in moved)
 
 
 def test_settlement_against_finals(trained, db):

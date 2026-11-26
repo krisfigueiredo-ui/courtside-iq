@@ -462,9 +462,27 @@ def archive_game_predictions(db: Session, game: m.Game, as_of: datetime | None =
                                          details=dict(mode=mode, p_push=sm["p_push"], minutes=pp["minutes"]["mean"],
                                                       model_only_mean=sm.get("model_only_mean"),
                                                       book=sm.get("book"))))
+    if mode == "live":
+        rows = _changed_only(db, game, rows)
     db.add_all(rows)
     db.commit()
     return rows
+
+
+def _changed_only(db: Session, game: m.Game, rows: list[m.Prediction]) -> list[m.Prediction]:
+    """Live forecasts are re-frozen when information changes; keep only the markets whose pick,
+    line or price moved since the newest forecast, so an unchanged market keeps its original
+    (earlier) forecast and the ledger only grows on real changes."""
+    latest: dict[tuple, m.Prediction] = {}
+    for p in db.scalars(select(m.Prediction).where(m.Prediction.game_id == game.id).order_by(m.Prediction.data_as_of, m.Prediction.id)):
+        latest[(p.market, p.player_id)] = p
+    out = []
+    for r in rows:
+        prev = latest.get((r.market, r.player_id))
+        if prev is not None and prev.selection == r.selection and prev.line == r.line and prev.price_american == r.price_american:
+            continue
+        out.append(r)
+    return out
 
 
 def _norm_cdf(z: float) -> float:

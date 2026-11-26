@@ -30,8 +30,9 @@ def _aware(dt):
 
 
 def archive_due(db, now: datetime) -> int:
-    """Freeze a forecast for each game starting within 30h when its newest odds snapshot is
-    newer than its newest prediction (i.e. information changed)."""
+    """Freeze a forecast for each game starting within 30h when its newest odds snapshot or prop
+    line is newer than its newest prediction (i.e. information changed). Only markets whose pick,
+    line or price changed get a new forecast."""
     from .services import modeling
 
     n = 0
@@ -39,9 +40,12 @@ def archive_due(db, now: datetime) -> int:
                                             m.Game.start_time > now, m.Game.start_time <= now + timedelta(hours=30))).all()
     for g in games:
         last_odds = db.scalar(select(func.max(m.OddsSnapshot.captured_at)).where(m.OddsSnapshot.game_id == g.id))
+        last_prop = db.scalar(select(func.max(m.PropLine.captured_at)).where(m.PropLine.game_id == g.id))
         last_pred = db.scalar(select(func.max(m.Prediction.created_at)).where(m.Prediction.game_id == g.id))
         if last_odds is None:
             continue
+        if last_prop is not None and _aware(last_prop) > _aware(last_odds):
+            last_odds = last_prop  # a prop line posted or moved
         if last_pred is None or _aware(last_pred) < _aware(last_odds):
             try:
                 n += len(modeling.archive_game_predictions(db, g, as_of=now, mode="live"))
