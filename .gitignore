@@ -22,3 +22,4 @@ backend/data/espn_cache/
 frontend/test-results/
 frontend/playwright-report/
 frontend/storybook-static/
+backend/data/ledger/

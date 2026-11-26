@@ -38,7 +38,7 @@ Basketball analytics platform for the NBA and NCAA Division I men's basketball, 
 | Live Games | Live terminal per game: scoreboard and linescore, ESPN's per-play win probability with the score margin underneath and the model's pre-game line, inferred possession, live pace against expected pace, interactive shot chart with zone splits, virtualised play-by-play, player box score. NBA and NCAA tabs hold slates, schedules, efficiency standings and directories |
 | Market Intelligence | Line screen with model lines, cover and push probabilities, EV and no-vig prices; line movement on TradingView Lightweight Charts (open, every observed change, close, model price line); totals lab; player prop distributions |
 | Research Lab | Team and player trends, sortable directories with conference filters, team and player comparisons, data import and export |
-| Picks & Performance | Graded forecast archive, calibration, accuracy by market, streaks and splits by team, player and conference (current and longest runs, last 10, over/under splits, results against the closing line), closing line value, picks journal, error analysis |
+| Picks & Performance | Model picks: what the model would bet now (bet, lean or pass, with price, stake and the record of comparable past picks) and the live record of forecasts frozen before tip-off since November 26, 2026; graded forecast archive, calibration, accuracy by market, streaks and splits by team, player and conference (current and longest runs, last 10, over/under splits, results against the closing line), closing line value, picks journal, error analysis |
 | Model Intelligence | Version registry and comparison, held-out metrics and benchmarks, walk-forward and season backtests, reliability diagrams, feature importance, SHAP explanations, Optuna tuning, simulation explorer |
 | COURTSIDE AI | Collapsible side panel that knows the selected game, team, player and market; answers separate verified data, model estimates and interpretation, with record citations |
 
@@ -254,6 +254,20 @@ The closing line is hard to beat. Against the spread, both leagues are at coin-f
 3. Outcomes: Negative Binomial simulations that share a game-flow multiplier, so points, assists and threes are positively correlated. PRA is summed per simulation.
 
 DraftKings prop lines (points, rebounds, assists, threes, PRA) come from ESPN's core API. ESPN does not label which of the two prices is the over: lines are exact, so grading is exact, but prices are approximate (averaged when the two are close; when lopsided, assigned using the player's own recent game log, and the prop is skipped when that is ambiguous). When a sportsbook line exists, the mean is anchored to it with a per-stat weight. The weight is fit on the oldest 70% of settled prop forecasts and checked on the newest 30%. It is adopted only when it beats the default weight of 0.5 on that holdout, and it applies to new forecasts only.
+
+## Model picks and the live record
+
+The Model picks tab (and the Command Center and each game page) states what the model would bet. A pick is the model's official pre-game forecast with its expected value at the posted price. The model's own EV is not trusted on its own, because high-EV forecasts have not reliably done better (NBA props rated above 10% EV returned about −1% over 3,750 backtest picks). Each pick is tiered by how past forecasts of the same league, market and EV range actually did:
+
+| Call | Rule | Stake |
+|---|---|---|
+| Bet | EV of at least 2% and comparable past picks (50 or more) made money | 1 unit |
+| Lean | positive EV but fewer than 50 comparable past picks | 0.5 unit |
+| Pass | no positive EV, or comparable past picks lost money | none |
+
+**Live record.** Forecasts frozen in real time before tip-off (not backtests) are kept in an append-only ledger. The tier is stamped when a forecast is frozen and never changed. The static site rebuilds its database on every run, so the Pages workflow restores the ledger from the `ledger` branch, freezes new forecasts, grades finished games and pushes the ledger back; the branch history shows when each forecast existed. The live record (by call, market and day) starts on November 26, 2026 and is shown separately from the backtest. The ledger file is also published with the site (`data/live_predictions.jsonl.gz`).
+
+Forecasts are probabilities, not guarantees. Most markets sit close to the break-even line and small samples swing widely.
 
 ## Prediction archive and grading
 

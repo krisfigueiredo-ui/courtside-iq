@@ -18,6 +18,7 @@ import { american, cn, dateTime, MARKET_LABEL, num, pct, signed, spreadLine, STA
 import { useSelection } from "@/lib/store";
 import { HeadToHead } from "@/components/views/HeadToHead";
 import { PropsTable } from "@/components/views/PropsTable";
+import { GameCalls } from "@/components/views/ModelPicksView";
 import type { Game, Projection, PropProjection } from "@/lib/types";
 
 export default function GameView({ id }: { id: string }) {
@@ -43,6 +44,7 @@ export default function GameView({ id }: { id: string }) {
   return (
     <div className="space-y-3">
       <GameHeader g={g} p={p} live={live} />
+      {g.status === "scheduled" && <GameCalls gameId={g.id} league={g.league} />}
       <TabBar
         value={tab}
         onChange={setTab}

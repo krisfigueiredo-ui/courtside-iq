@@ -43,6 +43,10 @@ def bootstrap() -> dict:
             from .services import live_data
 
             out["espn"] = live_data.prepare(db)
+        from .services import ledger
+
+        if ledger.LEDGER_PATH.exists():
+            out["ledger"] = ledger.import_(db)  # live forecasts from earlier runs, before any backtest
         for league in ("NBA", "CBB"):
             if modeling.active_version(db, league) is None:
                 try:
@@ -59,6 +63,9 @@ def bootstrap() -> dict:
                 fit = modeling.fit_prop_blend(db, league)
                 out[f"prop_blend_{league}"] = fit.get("weights") or fit.get("status")
         out["archived_upcoming"] = _archive_upcoming(db)
+        from .services import picks
+
+        out["tiers_stamped"] = picks.stamp_tiers(db)
         out["settled"] = settlement.settle_all(db)
         out["indexed"] = rag.index_core(db) + rag.index_dynamic(db)
     return out

@@ -152,6 +152,10 @@ def run_cycle(force_odds: bool = False) -> dict:
                 _state["last_odds"] = time.time()
             out.update(_live_extras(db, c, now, force_odds))
         out["archived"] = archive_due(db, now)
+        if out["archived"]:
+            from .services import picks
+
+            out["tiers_stamped"] = picks.stamp_tiers(db)
         out["settled"] = settlement.settle_all(db)
         if out["settled"] or time.time() - _state.get("last_index", 0) > 3600:
             from .ai import rag

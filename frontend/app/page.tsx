@@ -8,9 +8,10 @@ import { Suspense, useEffect, useMemo } from "react";
 import { C, EChart, baseAxis, tooltip } from "@/components/charts/EChart";
 import { PlayerPortrait, TeamCrest } from "@/components/identity/identity";
 import { DataTable } from "@/components/ui/DataTable";
+import { TierTag, type PickRow } from "@/components/views/ModelPicksView";
 import { Empty, LiveDot, Panel, PanelHeader, ResultBadge, Skeleton, SourceStamp, Stat, StatStrip } from "@/components/ui/primitives";
 import { useApi } from "@/lib/api";
-import { MARKET_LABEL, cn, num, pct, periodLabel, signed, spreadLine, timeShort } from "@/lib/format";
+import { MARKET_LABEL, american, cn, num, pct, periodLabel, signed, spreadLine, timeShort } from "@/lib/format";
 import { useTicker } from "@/lib/hooks";
 import { usePrefs } from "@/lib/store";
 import type { BoardRow, PredictionRow, PropProjection } from "@/lib/types";
@@ -109,6 +110,7 @@ function CommandCenter() {
   const recent = useApi<PredictionRow[]>(`/api/predictions?limit=60&settled=true&games_only=true${league === "ALL" ? "" : `&league=${league}`}`);
   const props = useApi<{ props: PropProjection[] }>(league === "CBB" ? null : "/api/props?league=NBA");
   const { data: ticker } = useTicker(league === "ALL" ? undefined : league);
+  const picks = useApi<{ rows: PickRow[]; counts?: Record<string, number> }>(`/api/picks/board${q}`);
   const setAi = usePrefs((s) => s.setAiOpen);
   useEffect(() => {
     if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("ai") === "1") setAi(true);
@@ -163,35 +165,36 @@ function CommandCenter() {
         </Panel>
         <div className="space-y-3">
           <Panel>
-            <PanelHeader title="Largest disagreements" right={<Link href="/markets" className="text-xs text-muted hover:text-fg">Markets →</Link>} />
+            <PanelHeader
+              title="Model bets now"
+              eyebrow={picks.data ? `${picks.data.counts?.bet ?? 0} bets · ${picks.data.counts?.lean ?? 0} leans` : undefined}
+              right={<Link href="/picks" className="text-xs text-muted hover:text-fg">All picks →</Link>}
+            />
             <div className="divide-y divide-hair">
-              {disagreements.map((x) => {
-                const g = x.r.game;
-                const spreadBig = Math.abs(x.dSpread ?? 0) >= Math.abs(x.dTotal ?? 0) / 2;
-                return (
-                  <Link key={g.id} href={`/games/${g.id}`} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-3 py-1.5 text-sm hover:bg-raised">
-                    <span className="flex min-w-0 items-center gap-1.5">
-                      <TeamCrest team={g.away} size={15} />
-                      <span className="truncate text-fg-2">
-                        {g.away.abbr} @ {g.home.abbr}
+              {(picks.data?.rows ?? [])
+                .filter((r) => r.tier !== "pass")
+                .sort((a, b) => (a.tier === b.tier ? b.ev - a.ev : a.tier === "bet" ? -1 : 1))
+                .slice(0, 8)
+                .map((r) => (
+                  <Link key={r.id} href={`/games/${r.game.id}`} className="grid grid-cols-[44px_minmax(0,1fr)_auto] items-center gap-2 px-3 py-1.5 hover:bg-raised">
+                    <TierTag tier={r.tier} />
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-medium text-fg">
+                        {r.pick} <span className="num font-normal text-muted">{american(r.price)}</span>
                       </span>
-                      <span className="text-2xs text-subtle">{timeShort(g.start_time)}</span>
+                      <span className="num block truncate text-2xs text-subtle">
+                        {r.game.away.abbr} @ {r.game.home.abbr} · {timeShort(r.game.start_time)} · model {pct(r.model_prob, 0)} vs {pct(r.breakeven, 0)} needed
+                      </span>
                     </span>
-                    <span className="num text-xs">
-                      {spreadBig ? (
-                        <>
-                          <span className="text-subtle">sprd</span> {spreadLine(x.modelSpread)} <span className="text-subtle">vs</span> {spreadLine(x.closeSpread)}
-                        </>
-                      ) : (
-                        <>
-                          <span className="text-subtle">tot</span> {num(x.modelTotal, 1)} <span className="text-subtle">vs</span> {num(x.closeTotal, 1)}
-                        </>
-                      )}
+                    <span className="num text-right text-xs text-pos">
+                      {signed(r.ev * 100, 1)}%<span className="block text-2xs text-subtle">{r.stake}u</span>
                     </span>
                   </Link>
-                );
-              })}
-              {!disagreements.length && <Empty title="No market lines posted yet" />}
+                ))}
+              {picks.data && !(picks.data.rows ?? []).some((r) => r.tier !== "pass") && (
+                <Empty title="No bets right now">Every current forecast is a pass: no edge, or no record of that edge paying. That is a valid answer.</Empty>
+              )}
+              {!picks.data && <Skeleton className="m-3 h-40" />}
             </div>
           </Panel>
           <Panel>

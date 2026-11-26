@@ -48,7 +48,7 @@ def static_paths() -> list[str]:
     paths += _leagues("/api/ticker") + _leagues("/api/board")
     for hours in (6, 40):
         paths += _leagues(f"/api/board?hours={hours}", "&")
-    for p in ("/api/performance/summary", "/api/performance/clv", "/api/diagnostics", "/api/performance/residuals"):
+    for p in ("/api/performance/summary", "/api/performance/clv", "/api/diagnostics", "/api/performance/residuals", "/api/picks/board", "/api/picks/record"):
         paths += _leagues(p)
     for by in ("market", "team", "player", "conference"):
         paths += _leagues(f"/api/performance/breakdown?by={by}", "&")

@@ -13,14 +13,15 @@ function watchErrors(page: Page) {
 }
 
 const PAGES: { path: string; expect: RegExp; name: string }[] = [
-  { name: "command-center", path: "", expect: /Slate: model against the market/ },
+  { name: "command-center", path: "", expect: /Model bets now/ },
   { name: "live", path: "live/", expect: /Games|No games in the current window/ },
   { name: "markets", path: "markets/", expect: /Home spread by sportsbook|No games/ },
   { name: "markets-totals", path: "markets/?tab=totals", expect: /Total|total/ },
   { name: "research-teams", path: "research/?tab=teams", expect: /Teams/ },
   { name: "research-players", path: "research/?tab=players", expect: /NBA players/ },
   { name: "research-compare", path: "research/?tab=compare", expect: /vs/ },
-  { name: "picks", path: "picks/", expect: /Graded/ },
+  { name: "picks", path: "picks/", expect: /What the model would bet/ },
+  { name: "picks-backtest", path: "picks/?tab=performance", expect: /Graded/ },
   { name: "picks-streaks", path: "picks/?tab=breakdown", expect: /Streaks & splits/ },
   { name: "model", path: "model/", expect: /Model versions/ },
   { name: "settings", path: "settings/", expect: /Display preferences/ },

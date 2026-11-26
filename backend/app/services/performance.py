@@ -40,7 +40,8 @@ def official_predictions(db: Session, league: str | None = None, include_pending
             player_id=p.player_id, player=players.get(p.player_id), home=ht.abbreviation, away=at.abbreviation,
             home_team_id=ht.id, away_team_id=at.id, selection_team=sel_team.abbreviation if sel_team else None,
             home_conf=confs.get(ht.conference_id), away_conf=confs.get(at.conference_id), is_demo=p.is_demo,
-            mode=(p.details or {}).get("mode"),
+            mode=(p.details or {}).get("mode"), p_push=float((p.details or {}).get("p_push") or 0.0),
+            tier=(p.details or {}).get("tier"),
         ))
     df = pd.DataFrame(rows)
     if df.empty:

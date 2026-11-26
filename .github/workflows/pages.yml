@@ -44,9 +44,34 @@ jobs:
           path: backend/data/espn_cache
           key: espn-cache-${{ github.run_id }}
           restore-keys: espn-cache-
+      - name: Restore the live forecast ledger
+        run: |
+          mkdir -p backend/data/ledger
+          if git fetch -q origin ledger 2>/dev/null; then
+            git show FETCH_HEAD:live_predictions.jsonl.gz > backend/data/ledger/live_predictions.jsonl.gz || rm -f backend/data/ledger/live_predictions.jsonl.gz
+          fi
+          ls -la backend/data/ledger
       - name: Prepare data and models
         working-directory: backend
         run: python -m app.cli bootstrap
+      - name: Save the live forecast ledger
+        working-directory: backend
+        run: python -m app.cli export-ledger
+      - name: Push the ledger branch
+        run: |
+          WORK="$(mktemp -d)"; cd "$WORK"
+          git init -q -b ledger
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          REMOTE="https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
+          if git fetch -q "$REMOTE" ledger 2>/dev/null; then git checkout -q -B ledger FETCH_HEAD; fi
+          cp "$GITHUB_WORKSPACE/backend/data/ledger/live_predictions.jsonl.gz" .
+          printf '%s\n' "# COURTSIDE IQ live forecast ledger" "" \
+            "Append-only record of forecasts frozen in real time before tip-off (one JSON object per line, gzipped)." \
+            "Each commit is written by the Pages workflow; the history shows when every forecast existed." > README.md
+          git add -A
+          git diff --cached --quiet || git commit -q -m "Ledger update ${GITHUB_SHA::7} $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push -q "$REMOTE" ledger
       - name: Export API responses
         working-directory: backend
         run: python -m app.cli export-static --out ../frontend/public/data
@@ -64,6 +89,7 @@ jobs:
         run: |
           export BASE_PATH="$BASE" NEXT_PUBLIC_BASE_PATH="$BASE"
           npm ci
+          cp ../backend/data/ledger/live_predictions.jsonl.gz public/data/ || true
           npm run build
           touch out/.nojekyll
       - name: Browser tests (desktop, tablet, mobile)

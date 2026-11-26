@@ -13,28 +13,31 @@ import { STATIC, STATIC_MESSAGE, api, exportUrl, useApi } from "@/lib/api";
 import { usePrefs } from "@/lib/store";
 import { useTab } from "@/lib/useTab";
 import { StreaksView } from "@/components/views/StreaksView";
+import { ModelPicksView } from "@/components/views/ModelPicksView";
 import { american, cn, dateShort, MARKET_LABEL, num, pct, signed, spreadLine } from "@/lib/format";
 import type { Game, PerfBlock, PredictionRow } from "@/lib/types";
 
-const TABS = ["performance", "breakdown", "archive", "journal", "diagnostics"] as const;
+const TABS = ["picks", "performance", "breakdown", "archive", "journal", "diagnostics"] as const;
 
 function PicksWorkspace() {
   const league = usePrefs((st) => st.league);
   const lq = league === "ALL" ? "" : `league=${league}`;
-  const [tab, setTab] = useTab<(typeof TABS)[number]>("performance", TABS);
+  const [tab, setTab] = useTab<(typeof TABS)[number]>("picks", TABS);
   return (
     <>
       <TabBar
         value={tab}
         onChange={setTab}
         tabs={[
-          { value: "performance", label: "Performance" },
+          { value: "picks", label: "Model picks" },
+          { value: "performance", label: "Backtest & performance" },
           { value: "breakdown", label: "Streaks & splits" },
           { value: "archive", label: "Forecast archive" },
           { value: "journal", label: "Picks journal" },
           { value: "diagnostics", label: "Error analysis" },
         ]}
       />
+      {tab === "picks" && <ModelPicksView />}
       {tab === "performance" && <Performance lq={lq} />}
       {tab === "breakdown" && <StreaksView />}
       {tab === "archive" && <Archive lq={lq} />}

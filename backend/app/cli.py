@@ -3,6 +3,7 @@
   python -m app.cli bootstrap                 # schema, registry, data (ESPN or demo), models, backtests
   python -m app.cli espn-backfill --league NBA --seasons 3   # real games, lines and box scores from ESPN
   python -m app.cli espn-sync                 # live refresh: yesterday/today/tomorrow, injuries, rosters
+  python -m app.cli export-ledger             # live (real-time) forecasts -> data/ledger/live_predictions.jsonl.gz
   python -m app.cli train --league NBA        # retrain a league (game + props when logs exist)
   python -m app.cli tune --league CBB --trials 30
   python -m app.cli sync-rosters              # BALLDONTLIE /players/active -> verified memberships
@@ -23,7 +24,7 @@ from datetime import date, timedelta
 def main() -> None:
     ap = argparse.ArgumentParser(prog="courtside")
     ap.add_argument("command", choices=["bootstrap", "train", "tune", "sync-rosters", "sync", "backfill", "settle", "reindex",
-                                        "export-snapshot", "load-snapshot", "export-static", "espn-backfill", "espn-sync"])
+                                        "export-snapshot", "load-snapshot", "export-static", "espn-backfill", "espn-sync", "export-ledger", "import-ledger"])
     ap.add_argument("--out", default="../frontend/public/data", help="output directory for export-static")
     ap.add_argument("--dir", default=None, help="snapshot directory (default backend/data/espn_snapshot, or demo_snapshot with DATA_SOURCE=demo)")
     ap.add_argument("--league", default="NBA", choices=["NBA", "CBB"])
@@ -68,6 +69,14 @@ def main() -> None:
                     out[f"games_{d}"] = sync.sync_games(db, a.league, d, c["balldontlie"])
             if c["the_odds_api"].configured:
                 out["odds"] = sync.sync_odds(db, a.league, c["the_odds_api"])
+        elif a.command == "export-ledger":
+            from .services import ledger
+
+            out = ledger.export(db)
+        elif a.command == "import-ledger":
+            from .services import ledger
+
+            out = ledger.import_(db)
         elif a.command == "espn-backfill":
             from .providers import espn_sync
 

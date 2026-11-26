@@ -459,6 +459,22 @@ def perf_streaks(by: str = "team", league: str | None = None, market: str = "all
     return _clean(streaks.streaks(db, by, league.upper() if league else None, market, min_n))
 
 
+@router.get("/picks/board")
+def picks_board(league: str | None = None, hours: int = 36, db: Session = Depends(get_db)):
+    """What the model would bet on now: latest pre-game forecasts, EV at the posted price, evidence-based tier."""
+    from ..services import picks
+
+    return _clean(picks.board(db, league.upper() if league else None, hours))
+
+
+@router.get("/picks/record")
+def picks_record(league: str | None = None, db: Session = Depends(get_db)):
+    """Forward (live) record: forecasts frozen in real time before tip-off, graded after the final."""
+    from ..services import picks
+
+    return _clean(picks.live_record(db, league.upper() if league else None))
+
+
 @router.get("/performance/residuals")
 def perf_residuals(league: str | None = None, db: Session = Depends(get_db)):
     return _clean(performance.residuals(db, league.upper() if league else None))
