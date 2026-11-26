@@ -17,6 +17,7 @@ import { STATIC, useApi } from "@/lib/api";
 import { american, cn, dateTime, MARKET_LABEL, num, pct, signed, spreadLine, STAT_LABEL } from "@/lib/format";
 import { useSelection } from "@/lib/store";
 import { HeadToHead } from "@/components/views/HeadToHead";
+import { PropsTable } from "@/components/views/PropsTable";
 import type { Game, Projection, PropProjection } from "@/lib/types";
 
 export default function GameView({ id }: { id: string }) {
@@ -336,17 +337,12 @@ export default function GameView({ id }: { id: string }) {
       {(props.data?.length ?? 0) > 0 && (
         <Panel>
           <PanelHeader
-            eyebrow="Player props"
-            title="Projected player outcomes"
+            eyebrow="model vs DraftKings line"
+            title="Player props"
             right={<Segmented size="sm" value={stat} onChange={setStat} options={["pts", "reb", "ast", "fg3m", "pra"].map((s) => ({ value: s, label: STAT_LABEL[s].replace("PTS+REB+AST", "PRA") }))} />}
           />
-          <div className="grid gap-3 p-3 md:grid-cols-2 xl:grid-cols-4">
-            {props.data!.map((pp) => (
-              <Link key={pp.player_id} href={`/players/${pp.player_id}`}>
-                <PropCard p={{ ...pp, game: g }} stat={stat} />
-              </Link>
-            ))}
-          </div>
+          <PropsTable props={props.data!} stat={stat} />
+          <div className="border-t border-hair px-3 py-1.5 text-2xs text-subtle">DraftKings lines via ESPN. Prices are approximate: ESPN does not label the over and under, so close prices are averaged.</div>
         </Panel>
       )}
           {!(props.data?.length ?? 0) && <Panel><Empty title="No player projections for this game">Player projections cover NBA games with an active props model.</Empty></Panel>}
