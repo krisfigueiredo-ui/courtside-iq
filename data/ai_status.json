@@ -1,0 +1,1 @@
+{"enabled":false,"model":"claude-opus-5-5","effort":"medium","tools":["search_documents","find_games","get_game_projection","get_odds_movement","league_efficiency_table","player_trends","model_performance","largest_market_disagreements","model_diagnostics","recent_results"]}
